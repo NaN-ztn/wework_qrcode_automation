@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import * as path from 'path'
-import { BrowserManager, InstallProgress } from './utils/browser-config'
 import { ConfigManager, AppConfig } from './utils/config-manager'
 import { WeworkManager } from './automation/wework'
 import { BrowserInstance } from './automation/browser-instance'
@@ -8,8 +7,10 @@ import { BrowserInstance } from './automation/browser-instance'
 class ElectronApp {
   private mainWindow: BrowserWindow | null = null
   private weworkManager: WeworkManager
+  private browserInstance: BrowserInstance
 
   constructor() {
+    this.browserInstance = BrowserInstance.getInstance()
     this.weworkManager = WeworkManager.getInstance()
     this.initConfig()
     this.init()
@@ -55,30 +56,26 @@ class ElectronApp {
   }
 
   private setupIPC(): void {
-    // 获取浏览器状态
+    // 浏览器状态API
     ipcMain.handle('get-browser-status', async () => {
-      return BrowserManager.getBrowserStatus()
+      return {
+        success: true,
+        data: {
+          hasSystemBrowser: false, // 简化实现，直接返回false
+          systemBrowserPath: null,
+          hasBundledChromium: true, // 使用Puppeteer内置Chromium
+        },
+      }
     })
 
-    // 检查是否需要安装Chromium
-    ipcMain.handle('needs-chromium-install', () => {
-      return BrowserManager.needsChromiumInstall()
+    ipcMain.handle('needs-chromium-install', async () => {
+      return false // 简化实现，使用Puppeteer内置Chromium
     })
 
-    // 安装Chromium
     ipcMain.handle('install-chromium', async () => {
-      try {
-        const success = await BrowserManager.installChromium((progress: InstallProgress) => {
-          // 发送进度到渲染进程
-          this.mainWindow?.webContents.send('install-progress', progress)
-        })
-
-        return { success, message: success ? 'Chromium安装成功！' : 'Chromium安装失败' }
-      } catch (error) {
-        return {
-          success: false,
-          message: `安装失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        }
+      return {
+        success: true,
+        message: '使用Puppeteer内置Chromium，无需安装',
       }
     })
 
@@ -120,40 +117,11 @@ class ElectronApp {
       }
     })
 
-    ipcMain.handle('start-automation', async () => {
-      try {
-        // 使用BrowserInstance单例来管理浏览器，确保session持久化
-        const result = await this.weworkManager.initBrowser()
-
-        if (result.success) {
-          return { success: true, message: '自动化已启动（session已保持）' }
-        } else {
-          return result
-        }
-      } catch (error) {
-        console.error('启动浏览器失败:', error)
-        return {
-          success: false,
-          message: `启动失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        }
-      }
-    })
-
-    ipcMain.handle('stop-automation', async () => {
-      try {
-        // 只清理BrowserInstance单例（保留session）
-        await BrowserInstance.cleanup()
-
-        return { success: true, message: '自动化已停止（session数据已保留）' }
-      } catch (error) {
-        return { success: false, message: `停止失败: ${error}` }
-      }
-    })
-
     // 企微登录状态检查
     ipcMain.handle('check-wework-login', async () => {
       try {
-        return await this.weworkManager.checkWeWorkLogin()
+        const res = await this.weworkManager.checkWeWorkLogin()
+        return res
       } catch (error) {
         console.error('检查企微登录状态失败:', error)
         return {
@@ -173,21 +141,46 @@ class ElectronApp {
         },
       }
     })
+
+    // 获取浏览器运行状态
+    ipcMain.handle('get-browser-running', async () => {
+      return {
+        success: true,
+        data: {
+          isRunning: this.weworkManager.isRunning(),
+        },
+      }
+    })
+
+    // 停止执行
+    ipcMain.handle('stop-execution', async () => {
+      try {
+        await this.browserInstance.forceCloseBrowser()
+        return {
+          success: true,
+          message: '执行已停止',
+        }
+      } catch (error) {
+        console.error('停止执行失败:', error)
+        return {
+          success: false,
+          message: `停止执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
   }
 
   private async cleanup(): Promise<void> {
-    console.log('开始清理资源（保留session数据）...')
+    console.log('开始清理资源')
 
     try {
       // 只清理BrowserInstance，但保留session数据
-      console.log('清理BrowserInstance（保留session）')
-      await BrowserInstance.cleanup()
+      console.log('清理BrowserInstance')
+      await this.browserInstance.forceCloseBrowser()
 
-      console.log('资源清理完成，session数据已保留')
+      console.log('资源清理完成')
     } catch (error) {
       console.error('清理资源时出错:', error)
-      // 如果需要，可以选择强制清理，但会丢失session
-      // await BrowserInstance.forceCleanup()
     }
   }
 }

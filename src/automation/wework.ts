@@ -33,6 +33,8 @@ export class WeworkManager extends BaseManager {
 
       const page = await this.createPage()
 
+      // Cookie已在浏览器初始化时自动恢复，无需手动处理
+
       // 设置页面参数
       await page.setViewport({ width: 1200, height: 800 })
       await page.setUserAgent(
@@ -75,6 +77,8 @@ export class WeworkManager extends BaseManager {
 
       // 在目标页面
       if (isOnTargetPage) {
+        console.log('🎉 检测到已登录状态')
+        // Cookie将在浏览器关闭时自动保存
         return {
           success: true,
           message: '已登录企微',
@@ -84,7 +88,7 @@ export class WeworkManager extends BaseManager {
 
       // 登录标题
       const loginTitleXpath = '//*[@id="wework_admin.loginpage_wx2_$"]//h2//span'
-      const res = await this.waitForElementDisappear(page, loginTitleXpath, 30000)
+      const res = await this.waitForElementDisappear(page, loginTitleXpath, 3000000)
 
       // 元素没有消失
       if (!res) {
@@ -109,6 +113,11 @@ export class WeworkManager extends BaseManager {
         success: isOnTargetPage,
         message: isOnTargetPage ? '已登录企微' : '页面错误',
         data: loginData,
+      }
+
+      if (isOnTargetPage) {
+        console.log('🎉 登录完成')
+        // Cookie将在浏览器关闭时自动保存
       }
 
       console.log('登录检查结果:', JSON.stringify(result, null, 2))
@@ -138,14 +147,3 @@ export class WeworkManager extends BaseManager {
     }
   }
 }
-
-;(async function () {
-  try {
-    const weworkManager = WeworkManager.getInstance()
-    const result = await weworkManager.checkWeWorkLogin()
-    await weworkManager.forceCloseBrowser()
-    console.log('浏览器已关闭，准备退出进程')
-  } catch (error) {
-    console.error('执行失败:', error)
-  }
-})()

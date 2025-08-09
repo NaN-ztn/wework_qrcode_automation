@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-这是一个基于Electron和Puppeteer的自动化操作工具，支持Windows和Mac平台打包构建。
+这是一个基于Electron和Puppeteer的企业微信自动化操作工具，支持Windows和Mac平台打包构建。主要功能是自动化处理企业微信二维码相关任务。
 
 ## 常用开发命令
 
@@ -35,34 +35,57 @@ npm run lint
 
 # 修复lint问题
 npm run lint:fix
+
+# 清理构建目录
+npm run clean
 ```
 
-## 架构要点
+## 核心架构
+
+### 主要模块结构
+
+- **main.ts**: Electron主进程，管理应用窗口和IPC通信
+- **renderer/**: 渲染进程文件（HTML、CSS、JS）
+- **automation/**: 自动化核心模块
+  - `base.ts`: 基础自动化管理器，提供通用方法
+  - `browser-instance.ts`: 浏览器实例单例管理器
+  - `wework.ts`: 企业微信特定的自动化逻辑
+- **utils/**: 工具模块
+  - `browser-config.ts`: 浏览器配置和Chromium安装管理
+  - `config-manager.ts`: 应用配置管理
+
+### 关键架构特点
+
+1. **单例模式**: `WeworkManager`和`BrowserInstance`使用单例模式确保浏览器实例的唯一性和session持久化
+2. **IPC通信**: 主进程与渲染进程通过IPC进行通信，处理浏览器操作、配置管理等
+3. **浏览器管理**: 智能检测系统Chrome/Chromium，支持自动下载安装Puppeteer的Chromium
+4. **配置管理**: 统一的配置系统，支持运行时配置保存和验证
+5. **跨平台支持**: 针对Windows、macOS、Linux的不同打包配置
 
 ### Electron + Puppeteer兼容性注意事项
 
-1. **Puppeteer版本选择**: 使用与当前Electron版本兼容的Puppeteer版本，避免Chrome版本不匹配
-2. **无头浏览器配置**: 在Electron主进程中启动Puppeteer时需要正确配置Chrome路径
-3. **沙盒模式**: 注意Electron的沙盒模式与Puppeteer的兼容性
-4. **权限配置**: 确保必要的权限配置用于自动化操作
-
-### 跨平台打包配置
-
-- 使用electron-builder进行跨平台打包
-- Windows: 需要配置合适的图标和签名
-- macOS: 需要处理公证和签名问题
-- 确保原生模块在目标平台上正确编译
-
-### 自动化操作架构
-
-- 主进程负责Electron窗口管理和系统交互
-- 渲染进程处理用户界面
-- Puppeteer在后台执行自动化任务
-- 通过IPC进行进程间通信
+- 使用Puppeteer 21.5.0版本确保与Electron 28.0.0的兼容性
+- **默认使用Puppeteer自带的Chrome**，不依赖系统Chrome浏览器
+- 浏览器实例管理采用单例模式，确保session数据持久化
+- 支持无头模式和有头模式切换，开发时默认显示浏览器窗口
+- 自动处理Chromium安装和版本兼容性问题
 
 ## 开发注意事项
 
-- 测试时需要在实际的Electron环境中验证Puppeteer功能
-- 打包前确保所有原生依赖都正确配置
-- 处理不同操作系统的路径差异
-- 确保自动化脚本的稳定性和容错能力
+### TypeScript配置
+- 使用ES2020目标，CommonJS模块系统
+- 严格模式开启，确保类型安全
+- 源码映射和声明文件生成已启用
+
+
+### 代码规范
+- ESLint + Prettier配置
+- 使用Standard规范
+- TypeScript特定规则已优化
+- 单引号、无分号、100字符行宽
+
+### 打包配置
+- 使用electron-builder进行跨平台打包
+- 支持dmg（macOS）、nsis（Windows）、AppImage（Linux）
+- 图标资源位于`assets/icons/`目录
+- 构建输出到`dist`目录

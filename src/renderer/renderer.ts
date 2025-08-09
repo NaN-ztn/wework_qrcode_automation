@@ -1,8 +1,7 @@
 class RendererApp {
-  private startBtn!: HTMLButtonElement
-  private stopBtn!: HTMLButtonElement
   private installBtn!: HTMLButtonElement
   private checkLoginBtn!: HTMLButtonElement
+  private stopBtn!: HTMLButtonElement
   private statusDiv!: HTMLDivElement
   private logsDiv!: HTMLDivElement
   private progressPanel!: HTMLDivElement
@@ -32,16 +31,15 @@ class RendererApp {
   constructor() {
     this.initializeElements()
     this.setupEventListeners()
-    this.checkBrowserStatus()
     this.loadConfig()
+    this.startStatusUpdater()
     this.addLog('应用程序已启动', 'info')
   }
 
   private initializeElements(): void {
-    this.startBtn = document.getElementById('startBtn') as HTMLButtonElement
-    this.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement
     this.installBtn = document.getElementById('installBtn') as HTMLButtonElement
     this.checkLoginBtn = document.getElementById('checkLoginBtn') as HTMLButtonElement
+    this.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement
     this.statusDiv = document.getElementById('status') as HTMLDivElement
     this.logsDiv = document.getElementById('logs') as HTMLDivElement
     this.progressPanel = document.getElementById('progressPanel') as HTMLDivElement
@@ -67,32 +65,9 @@ class RendererApp {
     this.resetConfigBtn = document.getElementById('resetConfigBtn') as HTMLButtonElement
   }
 
-  private async checkBrowserStatus(): Promise<void> {
-    try {
-      const status = await window.electronAPI.getBrowserStatus()
-      const needsInstall = await window.electronAPI.needsChromiumInstall()
-
-      if (status.hasSystemBrowser) {
-        this.addLog(`检测到系统浏览器: ${status.systemBrowserPath}`, 'success')
-        this.installBtn.style.display = 'none'
-      } else if (status.hasBundledChromium) {
-        this.addLog('使用Puppeteer内置浏览器', 'info')
-        this.installBtn.style.display = 'none'
-      } else if (needsInstall) {
-        this.addLog('未检测到Chrome浏览器，显示安装选项', 'error')
-        this.installBtn.style.display = 'inline-block'
-        this.startBtn.disabled = true
-      }
-    } catch (error) {
-      this.addLog(`浏览器状态检测失败: ${error}`, 'error')
-    }
-  }
-
   private setupEventListeners(): void {
-    this.startBtn.addEventListener('click', () => this.startAutomation())
-    this.stopBtn.addEventListener('click', () => this.stopAutomation())
-    this.installBtn.addEventListener('click', () => this.installChromium())
     this.checkLoginBtn.addEventListener('click', () => this.checkWeWorkLogin())
+    this.stopBtn.addEventListener('click', () => this.stopExecution())
 
     // 标签页切换
     this.mainTab.addEventListener('click', () => this.switchTab('main'))
@@ -101,11 +76,6 @@ class RendererApp {
     // 配置管理
     this.saveConfigBtn.addEventListener('click', () => this.saveConfig())
     this.resetConfigBtn.addEventListener('click', () => this.resetConfig())
-
-    // 监听安装进度
-    window.electronAPI.onInstallProgress((progress) => {
-      this.updateProgress(progress.percentage, progress.status)
-    })
   }
 
   private switchTab(tab: 'main' | 'config'): void {
@@ -200,8 +170,10 @@ class RendererApp {
 
   private async checkWeWorkLogin(): Promise<void> {
     try {
+      this.isRunning = true
       this.checkLoginBtn.disabled = true
       this.checkLoginBtn.textContent = '检查中...'
+      this.stopBtn.disabled = false
       this.updateLoginStatus('checking', '正在检查登录状态...')
       this.addLog('开始检查企微登录状态', 'info')
 
@@ -230,8 +202,10 @@ class RendererApp {
       this.updateLoginDetails(null)
       this.addLog(`检查登录状态失败: ${error}`, 'error')
     } finally {
+      this.isRunning = false
       this.checkLoginBtn.disabled = false
       this.checkLoginBtn.textContent = '检查企微登录'
+      this.stopBtn.disabled = true
     }
   }
 
@@ -261,93 +235,49 @@ class RendererApp {
     }
   }
 
-  private async installChromium(): Promise<void> {
-    try {
-      this.installBtn.disabled = true
-      this.progressPanel.style.display = 'block'
-      this.addLog('开始安装Chromium...', 'info')
-
-      const result = await window.electronAPI.installChromium()
-
-      if (result.success) {
-        this.addLog(result.message, 'success')
-        this.installBtn.style.display = 'none'
-        this.startBtn.disabled = false
-        this.progressPanel.style.display = 'none'
-
-        // 重新检查浏览器状态
-        await this.checkBrowserStatus()
-      } else {
-        this.addLog(result.message, 'error')
-        this.installBtn.disabled = false
-        this.progressPanel.style.display = 'none'
-      }
-    } catch (error) {
-      this.addLog(`安装失败: ${error}`, 'error')
-      this.installBtn.disabled = false
-      this.progressPanel.style.display = 'none'
-    }
-  }
-
   private updateProgress(percentage: number, status: string): void {
     this.progressBar.style.width = `${percentage}%`
     this.progressText.textContent = `${percentage}% - ${status}`
     this.addLog(status, 'info')
   }
 
-  private async startAutomation(): Promise<void> {
-    try {
-      this.updateButtonStates(true)
-      this.updateStatus('启动中...')
-      this.addLog('正在启动自动化系统...', 'info')
-
-      const result = await window.electronAPI.startAutomation()
-
-      if (result.success) {
-        this.isRunning = true
-        this.updateStatus('运行中')
-        this.addLog(result.message, 'success')
-      } else {
-        this.updateButtonStates(false)
-        this.updateStatus('启动失败')
-        this.addLog(result.message, 'error')
-      }
-    } catch (error) {
-      this.updateButtonStates(false)
-      this.updateStatus('启动失败')
-      this.addLog(`启动失败: ${error}`, 'error')
-    }
-  }
-
-  private async stopAutomation(): Promise<void> {
-    try {
-      this.updateStatus('停止中...')
-      this.addLog('正在停止自动化系统...', 'info')
-
-      const result = await window.electronAPI.stopAutomation()
-
-      if (result.success) {
-        this.isRunning = false
-        this.updateButtonStates(false)
-        this.updateStatus('已停止')
-        this.addLog(result.message, 'success')
-      } else {
-        this.updateStatus('停止失败')
-        this.addLog(result.message, 'error')
-      }
-    } catch (error) {
-      this.updateStatus('停止失败')
-      this.addLog(`停止失败: ${error}`, 'error')
-    }
-  }
-
-  private updateButtonStates(isRunning: boolean): void {
-    this.startBtn.disabled = isRunning
-    this.stopBtn.disabled = !isRunning
-  }
-
   private updateStatus(status: string): void {
     this.statusDiv.textContent = status
+  }
+
+  private async stopExecution(): Promise<void> {
+    try {
+      this.addLog('正在停止执行...', 'info')
+      const result = await window.electronAPI.stopExecution()
+
+      if (result.success) {
+        this.addLog(result.message, 'success')
+      } else {
+        this.addLog(result.message, 'error')
+      }
+    } catch (error) {
+      this.addLog(`停止执行失败: ${error}`, 'error')
+    }
+  }
+
+  private startStatusUpdater(): void {
+    // 每2秒更新一次停止按钮状态
+    setInterval(async () => {
+      if (!this.isRunning) {
+        await this.updateStopButtonStatus()
+      }
+    }, 2000)
+  }
+
+  private async updateStopButtonStatus(): Promise<void> {
+    try {
+      const result = await window.electronAPI.getBrowserRunning()
+      if (result.success && result.data) {
+        this.stopBtn.disabled = !result.data.isRunning
+      }
+    } catch (error) {
+      console.error('更新停止按钮状态失败:', error)
+    }
   }
 
   private addLog(message: string, type: 'info' | 'success' | 'error'): void {

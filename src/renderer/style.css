@@ -120,6 +120,15 @@ main {
     background: #138496;
 }
 
+.btn-danger {
+    background: #e74c3c;
+    border-color: #c0392b;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #c0392b;
+}
+
 .btn:disabled {
     background: #bdc3c7;
     cursor: not-allowed;

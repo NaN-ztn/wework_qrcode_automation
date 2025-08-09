@@ -25,8 +25,8 @@ export class ConfigManager {
       APP_NAME: '企业微信二维码自动化工具',
 
       // 自动化配置
-      WEWORK_CONTACT_URL: 'https://work.weixin.qq.com/wework_admin/frame#/chatGroupWelcomeIndex',
-      USER_DATA_DIR: '~/.wework-automation/chrome-data',
+      WEWORK_CONTACT_URL: 'https://work.weixin.qq.com/wework_admin/frame#/contacts',
+      USER_DATA_DIR: path.join(os.homedir(), '.wework-automation', 'chrome-data'),
     }
   }
 

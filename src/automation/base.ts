@@ -147,4 +147,32 @@ export class BaseManager {
   public getUserDataDir(): string {
     return this.browserInstance.getUserDataDir()
   }
+
+  /**
+   * 获取浏览器实例（用于高级操作）
+   */
+  public getBrowserInstance(): BrowserInstance {
+    return this.browserInstance
+  }
+
+  /**
+   * 保存当前Cookie
+   */
+  public async saveCookies(): Promise<boolean> {
+    return await this.browserInstance.saveCookies()
+  }
+
+  /**
+   * 检查是否有保存的Cookie
+   */
+  public hasSavedCookies(): boolean {
+    return this.browserInstance.hasSavedCookies()
+  }
+
+  /**
+   * 恢复Cookie到指定页面
+   */
+  public async restoreCookies(page: puppeteer.Page): Promise<boolean> {
+    return await this.browserInstance.restoreCookies(page)
+  }
 }
