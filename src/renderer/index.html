@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业微信二维码自动化工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>企业微信二维码自动化工具</h1>
+            <nav class="nav-tabs">
+                <button id="mainTab" class="tab-btn active">主页</button>
+                <button id="configTab" class="tab-btn">环境配置</button>
+            </nav>
+        </header>
+        
+        <main>
+            <!-- 主功能页面 -->
+            <div id="mainPanel" class="tab-content active">
+                <div class="control-panel">
+                    <button id="installBtn" class="btn btn-install" style="display: none;">安装Chromium</button>
+                    <button id="checkLoginBtn" class="btn btn-info">检查企微登录</button>
+                    <button id="startBtn" class="btn btn-primary">启动自动化</button>
+                    <button id="stopBtn" class="btn btn-secondary" disabled>停止自动化</button>
+                </div>
+                
+                <div id="progressPanel" class="progress-panel" style="display: none;">
+                    <h3>安装进度</h3>
+                    <div class="progress-bar">
+                        <div id="progressBar" class="progress-fill"></div>
+                    </div>
+                    <div id="progressText" class="progress-text">0%</div>
+                </div>
+                
+                <div class="status-panel">
+                    <h3>状态信息</h3>
+                    <div id="status" class="status-text">就绪</div>
+                </div>
+                
+                <div class="login-status-panel">
+                    <h3>企微登录状态</h3>
+                    <div id="loginStatus" class="login-status">未检查</div>
+                    <div id="loginDetails" class="login-details" style="display: none;">
+                        <div class="detail-item">
+                            <label>当前页面:</label>
+                            <span id="currentUrl">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>页面标题:</label>
+                            <span id="pageTitle">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>检查时间:</label>
+                            <span id="checkTime">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="log-panel">
+                    <h3>操作日志</h3>
+                    <div id="logs" class="log-container"></div>
+                </div>
+            </div>
+
+            <!-- 配置管理页面 -->
+            <div id="configPanel" class="tab-content">
+                <div class="config-header">
+                    <h2>环境配置管理</h2>
+                    <div class="config-actions">
+                        <button id="saveConfigBtn" class="btn btn-primary">保存配置</button>
+                        <button id="resetConfigBtn" class="btn btn-secondary">重置默认</button>
+                    </div>
+                </div>
+                
+                <form id="configForm" class="config-form">
+                    <!-- 基本配置 -->
+                    <div class="config-section">
+                        <h3>基本配置</h3>
+                        <div class="form-group">
+                            <label for="appName">应用名称</label>
+                            <input type="text" id="appName" name="APP_NAME" required>
+                        </div>
+                    </div>
+
+                    <!-- 自动化配置 -->
+                    <div class="config-section">
+                        <h3>自动化配置</h3>
+                        <div class="form-group">
+                            <label for="weworkContactUrl">企业微信通讯录链接</label>
+                            <input type="url" id="weworkContactUrl" name="WEWORK_CONTACT_URL" required>
+                            <small class="form-text">请输入企业微信通讯录页面的完整URL</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+    
+    <script src="renderer.js"></script>
+</body>
+</html>
