@@ -13,13 +13,8 @@ export interface AppConfig {
 }
 
 export class ConfigManager {
-  private static readonly CONFIG_FILE = path.join(os.homedir(), '.wework-automation', '.env')
-  private static readonly EXAMPLE_FILE = path.join(
-    os.homedir(),
-    '.wework-automation',
-    '.env.example',
-  )
-
+  private static readonly CONFIG_FILE = path.join(process.cwd(), '.env')
+  private static readonly EXAMPLE_FILE = path.join(process.cwd(), '.env.example')
   private static config: AppConfig | null = null
 
   /**
@@ -129,13 +124,6 @@ export class ConfigManager {
    */
   public static async saveConfig(config: AppConfig): Promise<boolean> {
     try {
-      // 确保配置目录存在
-      const configDir = path.dirname(this.CONFIG_FILE)
-      if (!fs.existsSync(configDir)) {
-        await fs.promises.mkdir(configDir, { recursive: true })
-        console.log(`创建配置目录: ${configDir}`)
-      }
-
       const lines: string[] = [
         '# 企业微信二维码自动化工具 - 环境配置文件',
         '# 此文件由应用自动生成，请谨慎手动修改',
