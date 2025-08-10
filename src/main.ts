@@ -187,6 +187,8 @@ class ElectronApp {
         const res = await this.weworkManager.checkWeWorkLogin()
         console.log('=== 主进程: 登录检查完成，结果:', JSON.stringify(res, null, 2))
 
+        if (!res.success) return res
+
         console.log('=== 主进程: 开始变更联系人信息 ===')
         const changeResult = await this.weworkManager.changeContactInfo({
           mobile: '13052828856',
