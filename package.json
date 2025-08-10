@@ -62,11 +62,13 @@
     },
     "files": [
       "dist/**/*", 
-      "assets/**/*"
+      "assets/**/*",
+      ".env.example"
     ],
     "asarUnpack": [
       "node_modules/puppeteer*/**/*",
-      "node_modules/@puppeteer/**/*"
+      "node_modules/@puppeteer/**/*",
+      "assets/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -74,12 +76,14 @@
       "files": [
         "dist/**/*", 
         "assets/**/*",
-        "chrome/mac*/**/*"
+        "chrome/mac*/**/*",
+        ".env.example"
       ],
       "asarUnpack": [
         "node_modules/puppeteer*/**/*",
         "node_modules/@puppeteer/**/*",
-        "chrome/mac*/**/*"
+        "chrome/mac*/**/*",
+        "assets/**/*"
       ],
       "target": [
         {
@@ -97,12 +101,14 @@
       "files": [
         "dist/**/*", 
         "assets/**/*",
-        "chrome/win*/**/*"
+        "chrome/win*/**/*",
+        ".env.example"
       ],
       "asarUnpack": [
         "node_modules/puppeteer*/**/*",
         "node_modules/@puppeteer/**/*",
-        "chrome/win*/**/*"
+        "chrome/win*/**/*",
+        "assets/**/*"
       ]
     },
     "linux": {

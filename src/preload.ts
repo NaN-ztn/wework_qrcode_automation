@@ -15,6 +15,11 @@ interface ElectronAPI {
   getAutomationStatus: () => Promise<{ success: boolean; data?: any }>
   getBrowserRunning: () => Promise<{ success: boolean; data?: any }>
   stopExecution: () => Promise<{ success: boolean; message: string }>
+  onMainProcessLog: (
+    callback: (logData: { level: string; message: string; timestamp: string }) => void,
+  ) => void
+  getLogs: () => Promise<{ success: boolean; data?: string[] }>
+  clearLogs: () => Promise<{ success: boolean; message?: string }>
 }
 
 const electronAPI: ElectronAPI = {
@@ -26,6 +31,11 @@ const electronAPI: ElectronAPI = {
   getAutomationStatus: () => ipcRenderer.invoke('get-automation-status'),
   getBrowserRunning: () => ipcRenderer.invoke('get-browser-running'),
   stopExecution: () => ipcRenderer.invoke('stop-execution'),
+  onMainProcessLog: (callback) => {
+    ipcRenderer.on('main-process-log', (_, logData) => callback(logData))
+  },
+  getLogs: () => ipcRenderer.invoke('get-logs'),
+  clearLogs: () => ipcRenderer.invoke('clear-logs'),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)

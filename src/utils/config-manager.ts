@@ -9,6 +9,7 @@ export interface AppConfig {
   // 自动化配置
   WEWORK_CONTACT_URL: string
   USER_DATA_DIR: string
+  STORE_AVATAR_PATH: string
 }
 
 export class ConfigManager {
@@ -27,6 +28,7 @@ export class ConfigManager {
       // 自动化配置
       WEWORK_CONTACT_URL: 'https://work.weixin.qq.com/wework_admin/frame#/contacts',
       USER_DATA_DIR: path.join(os.homedir(), '.wework-automation', 'chrome-data'),
+      STORE_AVATAR_PATH: path.join(process.cwd(), 'assets', 'store_avatar.PNG'),
     }
   }
 
@@ -38,8 +40,8 @@ export class ConfigManager {
       return defaultValue
     }
 
-    // 处理用户数据目录路径，支持 ~ 符号
-    if (key === 'USER_DATA_DIR') {
+    // 处理路径相关配置，支持 ~ 符号
+    if (key === 'USER_DATA_DIR' || key === 'STORE_AVATAR_PATH') {
       return value.startsWith('~') ? path.join(os.homedir(), value.slice(1)) : value
     }
 
@@ -94,16 +96,26 @@ export class ConfigManager {
       return this.config
     }
 
+    console.log('=== ConfigManager: 开始加载配置 ===')
+    console.log('配置文件路径:', this.CONFIG_FILE)
+    console.log('配置文件是否存在:', fs.existsSync(this.CONFIG_FILE))
+
     const defaultConfig = this.getDefaultConfig()
+    console.log('默认配置:', JSON.stringify(defaultConfig, null, 2))
+
     const envData = this.loadEnvFile()
+    console.log('环境文件数据:', JSON.stringify(envData, null, 2))
 
     // 合并配置
     const config: any = {}
     for (const [key, defaultValue] of Object.entries(defaultConfig)) {
-      config[key] = this.parseEnvValue(key, envData[key], defaultValue)
+      const parsedValue = this.parseEnvValue(key, envData[key], defaultValue)
+      config[key] = parsedValue
+      console.log(`配置项 ${key}: ${envData[key]} -> ${parsedValue}`)
     }
 
     this.config = config as AppConfig
+    console.log('最终配置:', JSON.stringify(this.config, null, 2))
     return this.config
   }
 
@@ -127,6 +139,7 @@ export class ConfigManager {
       lines.push('# ==================== 自动化配置 ====================')
       lines.push(`WEWORK_CONTACT_URL=${config.WEWORK_CONTACT_URL}`)
       lines.push(`USER_DATA_DIR=${config.USER_DATA_DIR}`)
+      lines.push(`STORE_AVATAR_PATH=${config.STORE_AVATAR_PATH}`)
 
       await fs.promises.writeFile(this.CONFIG_FILE, lines.join('\n'), 'utf8')
 

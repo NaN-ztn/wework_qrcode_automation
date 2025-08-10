@@ -26,7 +26,12 @@ class RendererApp {
   private saveConfigBtn!: HTMLButtonElement
   private resetConfigBtn!: HTMLButtonElement
 
+  // 日志控制元素
+  private clearLogsBtn!: HTMLButtonElement
+  private autoScrollBtn!: HTMLButtonElement
+
   private isRunning = false
+  private autoScroll = true
 
   constructor() {
     this.initializeElements()
@@ -63,6 +68,10 @@ class RendererApp {
     this.configForm = document.getElementById('configForm') as HTMLFormElement
     this.saveConfigBtn = document.getElementById('saveConfigBtn') as HTMLButtonElement
     this.resetConfigBtn = document.getElementById('resetConfigBtn') as HTMLButtonElement
+
+    // 日志控制元素
+    this.clearLogsBtn = document.getElementById('clearLogsBtn') as HTMLButtonElement
+    this.autoScrollBtn = document.getElementById('autoScrollBtn') as HTMLButtonElement
   }
 
   private setupEventListeners(): void {
@@ -76,6 +85,13 @@ class RendererApp {
     // 配置管理
     this.saveConfigBtn.addEventListener('click', () => this.saveConfig())
     this.resetConfigBtn.addEventListener('click', () => this.resetConfig())
+
+    // 日志控制
+    this.clearLogsBtn.addEventListener('click', () => this.clearLogs())
+    this.autoScrollBtn.addEventListener('click', () => this.toggleAutoScroll())
+
+    // 监听主进程日志
+    this.setupMainProcessLogListener()
   }
 
   private switchTab(tab: 'main' | 'config'): void {
@@ -270,14 +286,87 @@ class RendererApp {
     }
   }
 
+  private setupMainProcessLogListener(): void {
+    // 监听主进程日志
+    window.electronAPI.onMainProcessLog(
+      (logData: { level: string; message: string; timestamp: string }) => {
+        this.addMainProcessLog(
+          logData.message,
+          logData.level as 'log' | 'error' | 'warn',
+          logData.timestamp,
+        )
+      },
+    )
+
+    // 启动时加载历史日志
+    this.loadHistoryLogs()
+  }
+
+  private async loadHistoryLogs(): Promise<void> {
+    try {
+      const result = await window.electronAPI.getLogs()
+      if (result.success && result.data) {
+        result.data.forEach((logEntry: string) => {
+          this.addRawLog(logEntry)
+        })
+      }
+    } catch (error) {
+      console.error('加载历史日志失败:', error)
+    }
+  }
+
+  private clearLogs(): void {
+    this.logsDiv.innerHTML = ''
+    window.electronAPI.clearLogs().then((result) => {
+      if (result.success) {
+        this.addLog('日志已清空', 'info')
+      }
+    })
+  }
+
+  private toggleAutoScroll(): void {
+    this.autoScroll = !this.autoScroll
+    this.autoScrollBtn.classList.toggle('active', this.autoScroll)
+    this.autoScrollBtn.textContent = this.autoScroll ? '自动滚动' : '手动滚动'
+  }
+
+  private addMainProcessLog(
+    message: string,
+    level: 'log' | 'error' | 'warn',
+    timestamp: string,
+  ): void {
+    const logEntry = document.createElement('div')
+    const typeMap = { log: 'info', error: 'error', warn: 'warning' }
+    logEntry.className = `log-entry ${typeMap[level]} main-process`
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-source">[主进程]</span> <span class="log-message">${message}</span>`
+
+    this.logsDiv.appendChild(logEntry)
+    if (this.autoScroll) {
+      this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    }
+  }
+
+  private addRawLog(rawLogEntry: string): void {
+    const logEntry = document.createElement('div')
+    logEntry.className = 'log-entry raw'
+    logEntry.textContent = rawLogEntry
+
+    this.logsDiv.appendChild(logEntry)
+    if (this.autoScroll) {
+      this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    }
+  }
+
   private addLog(message: string, type: 'info' | 'success' | 'error'): void {
     const timestamp = new Date().toLocaleTimeString()
     const logEntry = document.createElement('div')
-    logEntry.className = `log-entry ${type}`
-    logEntry.textContent = `[${timestamp}] ${message}`
+    logEntry.className = `log-entry ${type} renderer-process`
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-source">[渲染进程]</span> <span class="log-message">${message}</span>`
 
     this.logsDiv.appendChild(logEntry)
-    this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    if (this.autoScroll) {
+      this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    }
   }
 }
 

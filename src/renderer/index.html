@@ -58,7 +58,13 @@
                 </div>
                 
                 <div class="log-panel">
-                    <h3>操作日志</h3>
+                    <div class="log-header">
+                        <h3>操作日志</h3>
+                        <div class="log-controls">
+                            <button id="clearLogsBtn" class="btn btn-small">清空日志</button>
+                            <button id="autoScrollBtn" class="btn btn-small active" data-auto-scroll="true">自动滚动</button>
+                        </div>
+                    </div>
                     <div id="logs" class="log-container"></div>
                 </div>
             </div>
