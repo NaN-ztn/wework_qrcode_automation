@@ -7,7 +7,7 @@
     "start": "npm run build && electron .",
     "dev": "npm run build:dev && electron . --dev",
     "copy:renderer": "cpy 'src/renderer/*.html' 'src/renderer/*.css' 'dist/renderer/' --flat",
-    "copy:renderer:win": "if not exist dist\\renderer mkdir dist\\renderer && copy src\\renderer\\*.html dist\\renderer\\ && copy src\\renderer\\*.css dist\\renderer\\",
+    "copy:renderer:win": "if not exist dist\\renderer mkdir dist\\renderer && copy /Y src\\renderer\\*.html dist\\renderer\\ && copy /Y src\\renderer\\*.css dist\\renderer\\",
     "build": "tsc && npm run copy:renderer && electron-builder",
     "build:dev": "tsc && npm run copy:renderer",
     "build:win": "tsc && npm run copy:renderer:win && electron-builder --win",
