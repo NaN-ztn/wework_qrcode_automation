@@ -4,94 +4,24 @@ import { app } from 'electron'
 import * as os from 'os'
 
 /**
- * 获取Chrome路径配置（根据平台）
+ * 根据平台获取Chrome可执行文件的可能路径
  */
-function getChromePathConfig() {
+function getChromeExecutablePaths() {
   const platform = os.platform()
+  const arch = os.arch()
 
   if (platform === 'win32') {
-    return {
-      // Windows平台的Chrome路径
-      chromeDir: 'win64-141.0.7347.0',
-      subPath: path.join('chrome-win64', 'chrome.exe'),
-    }
+    return ['chrome-win64/chrome.exe', 'chrome-win32/chrome.exe']
   } else if (platform === 'darwin') {
-    const arch = os.arch()
+    const chromePath = 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
     if (arch === 'arm64') {
-      return {
-        // macOS ARM64平台
-        chromeDir: 'mac_arm-141.0.7347.0',
-        subPath: path.join(
-          'chrome-mac-arm64',
-          'Google Chrome for Testing.app',
-          'Contents',
-          'MacOS',
-          'Google Chrome for Testing',
-        ),
-      }
+      return [`chrome-mac-arm64/${chromePath}`, `chrome-mac/${chromePath}`]
     } else {
-      return {
-        // macOS x64平台
-        chromeDir: 'mac-141.0.7347.0',
-        subPath: path.join(
-          'chrome-mac',
-          'Google Chrome for Testing.app',
-          'Contents',
-          'MacOS',
-          'Google Chrome for Testing',
-        ),
-      }
+      return [`chrome-mac/${chromePath}`, `chrome-mac-arm64/${chromePath}`]
     }
   } else {
-    return {
-      // Linux平台
-      chromeDir: 'linux-141.0.7347.0',
-      subPath: path.join('chrome-linux64', 'chrome'),
-    }
+    return ['chrome-linux64/chrome', 'chrome-linux/chrome']
   }
-}
-
-/**
- * 获取所有可能的Chrome目录配置
- */
-function getAllPossibleChromeConfigs() {
-  // 返回所有平台的Chrome配置，用于检测可用的Chrome
-  return [
-    {
-      chromeDir: 'win64-141.0.7347.0',
-      subPath: path.join('chrome-win64', 'chrome.exe'),
-      platform: 'win32',
-    },
-    {
-      chromeDir: 'mac_arm-141.0.7347.0',
-      subPath: path.join(
-        'chrome-mac-arm64',
-        'Google Chrome for Testing.app',
-        'Contents',
-        'MacOS',
-        'Google Chrome for Testing',
-      ),
-      platform: 'darwin',
-      arch: 'arm64',
-    },
-    {
-      chromeDir: 'mac-141.0.7347.0',
-      subPath: path.join(
-        'chrome-mac',
-        'Google Chrome for Testing.app',
-        'Contents',
-        'MacOS',
-        'Google Chrome for Testing',
-      ),
-      platform: 'darwin',
-      arch: 'x64',
-    },
-    {
-      chromeDir: 'linux-141.0.7347.0',
-      subPath: path.join('chrome-linux64', 'chrome'),
-      platform: 'linux',
-    },
-  ]
 }
 
 /**
@@ -129,46 +59,32 @@ export function getChromePath(): string {
     throw new Error(`Chrome目录不存在: ${chromeBaseDir}`)
   }
 
-  // 列出chrome目录内容
-  const chromeContents = fs.readdirSync(chromeBaseDir)
-  console.log('Chrome目录内容:', chromeContents)
+  // 列出chrome目录内容（版本目录）
+  const chromeVersionDirs = fs.readdirSync(chromeBaseDir).filter((item) => {
+    return fs.statSync(path.join(chromeBaseDir, item)).isDirectory()
+  })
+  console.log('Chrome版本目录:', chromeVersionDirs)
 
-  // 首先尝试当前平台的Chrome配置
-  const currentConfig = getChromePathConfig()
-  const currentPlatformPath = path.join(
-    chromeBaseDir,
-    currentConfig.chromeDir,
-    currentConfig.subPath,
+  // 获取当前平台的Chrome可执行文件路径
+  const executablePaths = getChromeExecutablePaths()
+  console.log('当前平台Chrome可执行文件路径:', executablePaths)
+
+  // 遍历所有版本目录，查找匹配的Chrome可执行文件
+  for (const versionDir of chromeVersionDirs) {
+    console.log(`检查版本目录: ${versionDir}`)
+
+    for (const execPath of executablePaths) {
+      const fullChromePath = path.join(chromeBaseDir, versionDir, execPath)
+      console.log(`  检查: ${fullChromePath}`)
+
+      if (fs.existsSync(fullChromePath)) {
+        console.log(`✅ 找到Chrome: ${fullChromePath}`)
+        return fullChromePath
+      }
+    }
+  }
+
+  throw new Error(
+    `未找到可用的Chrome可执行文件。版本目录: ${chromeVersionDirs.join(', ')}，平台: ${os.platform()}`,
   )
-  console.log(`优先检查当前平台(${os.platform()})Chrome: ${currentPlatformPath}`)
-
-  if (fs.existsSync(currentPlatformPath)) {
-    console.log(`✅ 找到当前平台Chrome: ${currentPlatformPath}`)
-    return currentPlatformPath
-  } else {
-    console.log(`❌ 当前平台Chrome不存在: ${currentPlatformPath}`)
-  }
-
-  // 如果当前平台Chrome不存在，尝试所有其他平台的Chrome配置
-  console.log('尝试其他平台的Chrome配置...')
-  const allConfigs = getAllPossibleChromeConfigs()
-
-  for (const config of allConfigs) {
-    // 跳过当前平台（已经检查过了）
-    if (config.platform === os.platform() && (!config.arch || config.arch === os.arch())) {
-      continue
-    }
-
-    const fullChromePath = path.join(chromeBaseDir, config.chromeDir, config.subPath)
-    console.log(`检查${config.platform || 'unknown'}平台Chrome路径: ${fullChromePath}`)
-
-    if (fs.existsSync(fullChromePath)) {
-      console.log(`⚠️ 使用非当前平台的Chrome: ${fullChromePath}`)
-      return fullChromePath
-    } else {
-      console.log(`❌ Chrome不存在: ${fullChromePath}`)
-    }
-  }
-
-  throw new Error(`所有Chrome路径都不可用，chrome目录内容: ${chromeContents.join(', ')}`)
 }
