@@ -2,6 +2,7 @@ import * as puppeteer from 'puppeteer'
 import * as fs from 'fs'
 import { ConfigManager } from '../utils/config-manager'
 import { CookieManager } from '../utils/cookie-manager'
+import { getChromePath } from '../utils/chrome-path'
 import { AutomationResult } from '../types'
 
 /**
@@ -41,23 +42,30 @@ export class BrowserInstance {
         fs.mkdirSync(this.userDataDir, { recursive: true })
       }
 
-      console.log('=== 浏览器启动配置 ===')
+      // 获取项目中打包的Chrome路径
+      const chromePath = getChromePath()
+      console.log('=== Chrome路径配置 ===')
+      console.log('Chrome路径:', chromePath)
       console.log('平台:', process.platform)
       console.log('架构:', process.arch)
 
-      // 直接使用Puppeteer自带的Chromium，确保兼容性
-      try {
-        const puppeteerChromePath = puppeteer.executablePath()
-        console.log('Puppeteer Chromium路径:', puppeteerChromePath)
-      } catch (error) {
-        console.log('获取Puppeteer Chromium路径失败:', error)
+      // 强制使用项目中的Chrome，如果找不到则报错
+      if (!chromePath) {
+        throw new Error('未找到项目中的Chrome，请确保chrome目录存在且包含对应平台的Chrome文件')
       }
+
+      // 验证Chrome可执行文件是否存在
+      if (!fs.existsSync(chromePath)) {
+        throw new Error(`Chrome可执行文件不存在: ${chromePath}`)
+      }
+
+      console.log('✅ 强制使用项目中的Chrome:', chromePath)
 
       // 添加持久化用户数据目录和增强的Chrome启动参数
       const launchOptions = {
         headless: false,
         userDataDir: this.userDataDir,
-        // 不设置executablePath，使用Puppeteer自带的Chromium
+        executablePath: chromePath, // 强制使用项目中的Chrome
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -79,7 +87,6 @@ export class BrowserInstance {
         ],
       }
 
-      console.log('使用Puppeteer自带的Chromium启动浏览器')
       this.browser = await puppeteer.launch(launchOptions)
 
       // 浏览器初始化成功后，为默认页面恢复Cookie

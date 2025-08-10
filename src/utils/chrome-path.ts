@@ -98,57 +98,77 @@ function getAllPossibleChromeConfigs() {
  * 获取本地Chrome执行路径
  */
 export function getChromePath(): string {
-  const { chromeDir, subPath } = getChromePathConfig()
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev')
 
-  const possiblePaths = []
+  // 获取项目根目录
+  let projectRoot: string
 
   if (isDev) {
-    // 开发环境：使用项目根目录的chrome
-    const projectRoot = path.resolve(__dirname, '../../..')
-
-    // 首先尝试当前平台的配置
-    possiblePaths.push(path.join(projectRoot, 'chrome', chromeDir, subPath))
-
-    // 如果当前平台找不到，尝试所有可能的Chrome配置
-    const allConfigs = getAllPossibleChromeConfigs()
-    for (const config of allConfigs) {
-      possiblePaths.push(path.join(projectRoot, 'chrome', config.chromeDir, config.subPath))
+    // 开发环境：相对于dist/utils/chrome-path.js的位置，需要回到项目根目录
+    projectRoot = path.resolve(__dirname, '../..')
+  } else {
+    // 生产环境：从app路径获取
+    try {
+      const appPath = app.getAppPath()
+      projectRoot = appPath.replace('app.asar', 'app.asar.unpacked')
+    } catch (error) {
+      console.error('获取app路径失败:', error)
+      throw new Error('无法获取应用路径')
     }
   }
 
-  // 生产环境：使用app.asar.unpacked中的chrome
-  try {
-    const appPath = app.getAppPath()
-    const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked')
+  console.log('项目根目录:', projectRoot)
+  console.log('当前平台:', os.platform(), '架构:', os.arch())
 
-    // 首先尝试当前平台的配置
-    possiblePaths.push(path.join(unpackedPath, 'chrome', chromeDir, subPath))
+  // 检查chrome目录是否存在
+  const chromeBaseDir = path.join(projectRoot, 'chrome')
+  console.log('Chrome基础目录:', chromeBaseDir)
 
-    // 如果当前平台找不到，尝试所有可能的Chrome配置
-    const allConfigs = getAllPossibleChromeConfigs()
-    for (const config of allConfigs) {
-      possiblePaths.push(path.join(unpackedPath, 'chrome', config.chromeDir, config.subPath))
-    }
-  } catch (error) {
-    console.error('获取生产环境Chrome路径失败:', error)
+  if (!fs.existsSync(chromeBaseDir)) {
+    console.error('Chrome目录不存在:', chromeBaseDir)
+    throw new Error(`Chrome目录不存在: ${chromeBaseDir}`)
   }
 
-  // 去重
-  const uniquePaths = [...new Set(possiblePaths)]
+  // 列出chrome目录内容
+  const chromeContents = fs.readdirSync(chromeBaseDir)
+  console.log('Chrome目录内容:', chromeContents)
 
-  // 检查所有可能的路径
-  for (const chromePath of uniquePaths) {
-    console.log(`检查Chrome路径: ${chromePath}`)
-    if (fs.existsSync(chromePath)) {
-      console.log(`✅ 找到Chrome: ${chromePath}`)
-      return chromePath
+  // 首先尝试当前平台的Chrome配置
+  const currentConfig = getChromePathConfig()
+  const currentPlatformPath = path.join(
+    chromeBaseDir,
+    currentConfig.chromeDir,
+    currentConfig.subPath,
+  )
+  console.log(`优先检查当前平台(${os.platform()})Chrome: ${currentPlatformPath}`)
+
+  if (fs.existsSync(currentPlatformPath)) {
+    console.log(`✅ 找到当前平台Chrome: ${currentPlatformPath}`)
+    return currentPlatformPath
+  } else {
+    console.log(`❌ 当前平台Chrome不存在: ${currentPlatformPath}`)
+  }
+
+  // 如果当前平台Chrome不存在，尝试所有其他平台的Chrome配置
+  console.log('尝试其他平台的Chrome配置...')
+  const allConfigs = getAllPossibleChromeConfigs()
+
+  for (const config of allConfigs) {
+    // 跳过当前平台（已经检查过了）
+    if (config.platform === os.platform() && (!config.arch || config.arch === os.arch())) {
+      continue
+    }
+
+    const fullChromePath = path.join(chromeBaseDir, config.chromeDir, config.subPath)
+    console.log(`检查${config.platform || 'unknown'}平台Chrome路径: ${fullChromePath}`)
+
+    if (fs.existsSync(fullChromePath)) {
+      console.log(`⚠️ 使用非当前平台的Chrome: ${fullChromePath}`)
+      return fullChromePath
+    } else {
+      console.log(`❌ Chrome不存在: ${fullChromePath}`)
     }
   }
 
-  // 如果本地Chrome都没找到，使用Puppeteer自带的Chromium
-  console.log('未找到本地Chrome，将使用Puppeteer自带的Chromium')
-  console.log(`平台: ${os.platform()}, 架构: ${os.arch()}`)
-
-  return ''
+  throw new Error(`所有Chrome路径都不可用，chrome目录内容: ${chromeContents.join(', ')}`)
 }
