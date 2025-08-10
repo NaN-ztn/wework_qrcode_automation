@@ -1,5 +1,4 @@
 import * as puppeteer from 'puppeteer'
-import * as path from 'path'
 import * as fs from 'fs'
 import { ConfigManager } from '../utils/config-manager'
 import { AutomationResult } from '../types'
