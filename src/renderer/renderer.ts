@@ -235,16 +235,6 @@ class RendererApp {
     }
   }
 
-  private updateProgress(percentage: number, status: string): void {
-    this.progressBar.style.width = `${percentage}%`
-    this.progressText.textContent = `${percentage}% - ${status}`
-    this.addLog(status, 'info')
-  }
-
-  private updateStatus(status: string): void {
-    this.statusDiv.textContent = status
-  }
-
   private async stopExecution(): Promise<void> {
     try {
       this.addLog('正在停止执行...', 'info')

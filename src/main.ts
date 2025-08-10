@@ -68,17 +68,6 @@ class ElectronApp {
       }
     })
 
-    ipcMain.handle('needs-chromium-install', async () => {
-      return false // 简化实现，使用Puppeteer内置Chromium
-    })
-
-    ipcMain.handle('install-chromium', async () => {
-      return {
-        success: true,
-        message: '使用Puppeteer内置Chromium，无需安装',
-      }
-    })
-
     // 配置管理API
     ipcMain.handle('get-config', async () => {
       try {
@@ -174,7 +163,7 @@ class ElectronApp {
     console.log('开始清理资源')
 
     try {
-      // 只清理BrowserInstance，但保留session数据
+      // 只清理BrowserInstance
       console.log('清理BrowserInstance')
       await this.browserInstance.forceCloseBrowser()
 

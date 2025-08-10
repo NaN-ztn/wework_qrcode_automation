@@ -153,3 +153,4 @@ temp/
 
 # Puppeteer 下载的浏览器
 .cache/puppeteer/
+chrome

@@ -2,6 +2,7 @@ import * as puppeteer from 'puppeteer'
 import * as fs from 'fs'
 import { ConfigManager } from '../utils/config-manager'
 import { CookieManager } from '../utils/cookie-manager'
+import { getChromePath } from '../utils/chrome-path'
 import { AutomationResult } from '../types'
 
 /**
@@ -41,10 +42,18 @@ export class BrowserInstance {
         fs.mkdirSync(this.userDataDir, { recursive: true })
       }
 
+      // 获取本地Chrome路径
+      const chromePath = getChromePath()
+      console.log('=== Chrome路径配置 ===')
+      console.log('Chrome路径:', chromePath)
+      console.log('平台:', process.platform)
+      console.log('架构:', process.arch)
+
       // 添加持久化用户数据目录和增强的Chrome启动参数
       const launchOptions = {
         headless: false,
         userDataDir: this.userDataDir,
+        executablePath: chromePath || undefined, // 使用本地Chrome或让Puppeteer自动查找
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -123,7 +132,7 @@ export class BrowserInstance {
   }
 
   /**
-   * 关闭浏览器实例（保留session数据，关闭前保存Cookie）
+   * 关闭浏览器实例
    */
   public async closeBrowser(): Promise<void> {
     if (this.browser) {
@@ -139,7 +148,7 @@ export class BrowserInstance {
         )
 
         // 注意：不调用 browser.close()，保留浏览器进程和用户数据
-        console.log('页面已关闭，浏览器进程保留（session数据已保存）')
+        console.log('页面已关闭，浏览器进程保留')
       } catch (error) {
         console.error('关闭页面时出错:', error)
       }
@@ -167,7 +176,7 @@ export class BrowserInstance {
   }
 
   /**
-   * 静态方法：清理所有实例（保留session）
+   * 静态方法：清理所有实例
    */
   public static async cleanup(): Promise<void> {
     if (BrowserInstance.instance) {
