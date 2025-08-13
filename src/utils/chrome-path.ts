@@ -1,6 +1,5 @@
 import * as path from 'path'
 import * as fs from 'fs'
-import { app } from 'electron'
 import * as os from 'os'
 
 /**
@@ -25,6 +24,18 @@ function getChromeExecutablePaths() {
 }
 
 /**
+ * 安全获取Electron app对象
+ */
+function getElectronApp() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('electron').app
+  } catch (error) {
+    return null
+  }
+}
+
+/**
  * 获取本地Chrome执行路径
  */
 export function getChromePath(): string {
@@ -34,16 +45,25 @@ export function getChromePath(): string {
   let projectRoot: string
 
   if (isDev) {
-    // 开发环境：相对于dist/utils/chrome-path.js的位置，需要回到项目根目录
-    projectRoot = path.resolve(__dirname, '../..')
+    // 开发环境：使用当前工作目录
+    projectRoot = process.cwd()
   } else {
-    // 生产环境：从app路径获取
-    try {
-      const appPath = app.getAppPath()
-      projectRoot = appPath.replace('app.asar', 'app.asar.unpacked')
-    } catch (error) {
-      console.error('获取app路径失败:', error)
-      throw new Error('无法获取应用路径')
+    // 生产环境：尝试从Electron app获取路径
+    const app = getElectronApp()
+    if (app) {
+      try {
+        const appPath = app.getAppPath()
+        // 替换 app.asar 为 app.asar.unpacked (Electron打包文件格式)
+        // cspell:disable-next-line
+        projectRoot = appPath.replace('app.asar', 'app.asar.unpacked')
+      } catch (error) {
+        console.error('获取app路径失败:', error)
+        // 如果无法获取app路径，使用当前工作目录作为备选
+        projectRoot = process.cwd()
+      }
+    } else {
+      // 非Electron环境，使用当前工作目录
+      projectRoot = process.cwd()
     }
   }
 

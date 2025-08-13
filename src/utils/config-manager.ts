@@ -2,14 +2,24 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 
+export interface UserMapping {
+  name: string
+  qwUserId: string
+}
+
 export interface AppConfig {
   // 基本配置
   APP_NAME: string
 
   // 自动化配置
   WEWORK_CONTACT_URL: string
+  WEWORK_CREATE_GROUP_LIVE_CODE_URL: string
   USER_DATA_DIR: string
   STORE_AVATAR_PATH: string
+  QRCODE_TARGET_STORE_PATH: string
+
+  // 用户映射配置
+  USER_MAPPINGS: UserMapping[]
 }
 
 export class ConfigManager {
@@ -40,8 +50,14 @@ export class ConfigManager {
 
       // 自动化配置
       WEWORK_CONTACT_URL: 'https://work.weixin.qq.com/wework_admin/frame#/contacts',
+      WEWORK_CREATE_GROUP_LIVE_CODE_URL:
+        'https://work.weixin.qq.com/wework_admin/frame#/create_group_live_code',
       USER_DATA_DIR: path.join(os.homedir(), '.wework-automation', 'chrome-data'),
       STORE_AVATAR_PATH: path.join(process.cwd(), 'assets', 'store_avatar.PNG'),
+      QRCODE_TARGET_STORE_PATH: path.join(process.cwd(), '.wework-automation', 'qr_code'),
+
+      // 用户映射配置
+      USER_MAPPINGS: [],
     }
   }
 
@@ -56,6 +72,17 @@ export class ConfigManager {
     // 处理路径相关配置，支持 ~ 符号
     if (key === 'USER_DATA_DIR' || key === 'STORE_AVATAR_PATH') {
       return value.startsWith('~') ? path.join(os.homedir(), value.slice(1)) : value
+    }
+
+    // 处理JSON数组配置
+    if (key === 'USER_MAPPINGS') {
+      try {
+        const parsed = JSON.parse(value)
+        return Array.isArray(parsed) ? parsed : defaultValue
+      } catch (error) {
+        console.warn(`解析${key}配置失败，使用默认值:`, error)
+        return defaultValue
+      }
     }
 
     // 处理字符串
@@ -160,6 +187,12 @@ export class ConfigManager {
       lines.push(`WEWORK_CONTACT_URL=${config.WEWORK_CONTACT_URL}`)
       lines.push(`USER_DATA_DIR=${config.USER_DATA_DIR}`)
       lines.push(`STORE_AVATAR_PATH=${config.STORE_AVATAR_PATH}`)
+      lines.push('')
+
+      // 用户映射配置
+      lines.push('# ==================== 用户映射配置 ====================')
+      lines.push('# 用户名与企微ID映射关系，JSON数组格式')
+      lines.push(`USER_MAPPINGS=${JSON.stringify(config.USER_MAPPINGS)}`)
 
       await fs.promises.writeFile(this.CONFIG_FILE, lines.join('\n'), 'utf8')
       console.log(`配置文件已保存到: ${this.CONFIG_FILE}`)

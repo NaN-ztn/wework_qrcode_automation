@@ -26,16 +26,7 @@ export class WeworkManager extends BaseManager {
       const config = ConfigManager.loadConfig()
       const targetUrl = config.WEWORK_CONTACT_URL
 
-      if (!targetUrl) {
-        return {
-          success: false,
-          message: '企微通讯录URL未配置，请先在环境配置中设置',
-        }
-      }
-
       const page = await this.createPage()
-
-      // Cookie已在浏览器初始化时自动恢复，无需手动处理
 
       // 设置页面参数
       await page.setViewport({ width: 1200, height: 800 })
@@ -67,7 +58,7 @@ export class WeworkManager extends BaseManager {
       const timestamp = Date.now()
 
       // 检查当前页面状态
-      let isOnTargetPage = await this.isOnTargetPage(page, targetUrl)
+      const isOnTargetPage = await this.isOnTargetPage(page, targetUrl)
 
       // 构建详细登录数据
       const loginData = {
@@ -87,36 +78,26 @@ export class WeworkManager extends BaseManager {
         }
       }
 
-      // 搜索框
-      const searchInputXpath = '//*[@id="memberSearchInput"]'
-      const res = await this.waitForElementByXPath(page, searchInputXpath, 3000000)
-
-      // 元素没有消失
-      if (!res) {
-        loginData.isLoggedIn = false
-        return {
-          success: false,
-          message: '登录超时',
-          data: loginData,
-        }
-      }
-
-      // 重新检查登录状态
-      isOnTargetPage = await this.isOnTargetPage(page, targetUrl)
+      // 使用轮询检测是否到达目标页面
+      console.log('正在等待到达目标页面...')
+      const reachedTargetPage = await this.waitForTargetPage(page, targetUrl, {
+        timeout: 30000,
+        interval: 1000,
+      })
 
       // 更新登录数据
-      loginData.isLoggedIn = isOnTargetPage
+      loginData.isLoggedIn = reachedTargetPage
       loginData.currentUrl = page.url()
       loginData.pageTitle = await page.title()
       loginData.timestamp = Date.now()
 
       const result = {
-        success: isOnTargetPage,
-        message: isOnTargetPage ? '已登录企微' : '页面错误',
+        success: reachedTargetPage,
+        message: reachedTargetPage ? '已登录企微' : '登录超时或页面错误',
         data: loginData,
       }
 
-      if (isOnTargetPage) {
+      if (reachedTargetPage) {
         console.log('🎉 登录完成')
         // Cookie将在浏览器关闭时自动保存
       }
@@ -139,16 +120,7 @@ export class WeworkManager extends BaseManager {
     const config = ConfigManager.loadConfig()
     const targetUrl = config.WEWORK_CONTACT_URL
 
-    if (!targetUrl) {
-      return {
-        success: false,
-        message: '企微通讯录URL未配置，请先在环境配置中设置',
-      }
-    }
-
     const page = await this.createPage()
-
-    // Cookie已在浏览器初始化时自动恢复，无需手动处理
 
     // 设置页面参数
     await page.setViewport({ width: 1200, height: 800 })
@@ -306,17 +278,54 @@ export class WeworkManager extends BaseManager {
   }
 
   /**
-   * 处理门店名称 - 如果最后一个字不是"店"则添加"店"字
+   * 生成随机emoji (针对群名称使用)
    */
-  private processStoreName(storeName: string): string {
-    if (!storeName) return storeName
+  private generateRandomEmoji(): string {
+    const emojiList = [
+      '💐',
+      '🌸',
+      '🌺',
+      '🌻',
+      '🌷',
+      '🌹',
+      '🥀',
+      '🌵',
+      '🌿',
+      '☘️',
+      '🍀',
+      '🌱',
+      '🌾',
+      '🌴',
+      '🌳',
+      '🌲',
+      '🌊',
+      '🌈',
+      '⭐',
+      '✨',
+      '🌟',
+      '💫',
+      '🌙',
+      '☀️',
+      '🌞',
+      '🔥',
+      '💎',
+      '🎉',
+      '🎊',
+      '🎈',
+    ]
+    return emojiList[Math.floor(Math.random() * emojiList.length)]
+  }
 
-    const trimmedName = storeName.trim()
-    if (trimmedName.endsWith('店')) {
-      return trimmedName
-    } else {
-      return trimmedName + '店'
-    }
+  /**
+   * 查找模板元素 (使用base中的通用方法)
+   */
+  private async findTemplateElement(
+    page: puppeteer.Page,
+    templateName: string,
+    timeout: number = 10000,
+  ): Promise<puppeteer.ElementHandle<Element> | null> {
+    const templateContainer = '#__dialog__MNDialog__ div:nth-child(2) div'
+    return await this.findElementByText(page, templateContainer, templateName, 'label', timeout)
   }
 
   /**
@@ -545,14 +554,358 @@ export class WeworkManager extends BaseManager {
       }
     }
   }
+
+  /** 创建群活码 */
+  public async createGroupLiveCode(param: {
+    storeName: string
+    storeType: string
+    assistant: string
+  }): Promise<AutomationResult> {
+    const startTime = Date.now()
+    console.log(
+      `开始创建群活码 - 店铺: ${param.storeName}, 类型: ${param.storeType}, 助手: ${param.assistant}`,
+    )
+
+    try {
+      const config = ConfigManager.loadConfig()
+      const targetUrl = config.WEWORK_CREATE_GROUP_LIVE_CODE_URL
+
+      const page = await this.createPage()
+
+      // 设置页面参数
+      await page.setViewport({ width: 1200, height: 800 })
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      )
+
+      console.log(`正在导航到: ${targetUrl}`)
+
+      // 导航到目标页面
+      const response = await page.goto(targetUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      })
+
+      if (!response) {
+        return {
+          success: false,
+          message: '页面加载失败',
+        }
+      }
+
+      // 等待页面加载完成
+      await this.wait(2000)
+
+      // 生成群名称需要的随机emoji(在整个流程中保持一致)
+      const randomEmoji = this.generateRandomEmoji()
+      const processedStoreName = this.processStoreName(param.storeName)
+
+      console.log(`随机Emoji: ${randomEmoji}, 处理后店铺名: ${processedStoreName}`)
+
+      // 步骤1: 点击修改按钮
+      console.log('\n=== 步骤1: 点击修改按钮 ===')
+      await this.waitAndClick(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
+        10000,
+        '修改按钮',
+      )
+      await this.wait(1500) // 等待修改菜单展开
+
+      // 步骤2: 点击新建群聊按钮
+      console.log('\n=== 步骤2: 点击新建群聊按钮 ===')
+      await this.waitAndClick(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > ul > li:nth-child(1) > a',
+        10000,
+        '新建群聊按钮',
+      )
+      await this.wait(2000) // 等待新建群聊弹框完全加载
+
+      // 等待弹框出现
+      await this.waitForElement(page, '#__dialog__MNDialog__', 10000, '新建群聊弹框')
+
+      // 步骤3: 点击选择群主
+      console.log('\n=== 步骤3: 选择群主 ===')
+      await this.waitAndClick(
+        page,
+        '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > div > a',
+        10000,
+        '选择群主按钮',
+      )
+      await this.wait(1500) // 等待群主选择页面加载
+
+      // 步骤4: 在搜索成员框输入助手名称
+      console.log('\n=== 步骤4: 搜索助手 ===')
+      await this.waitAndFill(page, '#memberSearchInput', param.assistant, 10000, '成员搜索框')
+      await this.wait(2000) // 等待搜索结果异步加载
+
+      // 等待搜索结果出现
+      await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
+
+      // 步骤5: 点击第一个搜索项
+      console.log('\n=== 步骤5: 选择搜索结果 ===')
+      await this.waitAndClick(
+        page,
+        '#searchResult > ul > li > a > span:nth-child(1)',
+        10000,
+        '第一个搜索结果',
+      )
+      await this.wait(1000) // 等待选择状态更新
+
+      // 步骤6: 点击确认按钮
+      console.log('\n=== 步骤6: 确认群主选择 ===')
+      await this.waitAndClick(page, '#footer_submit_btn', 10000, '确认按钮')
+      await this.wait(2500) // 等待返回群创建页面并加载完成
+
+      // 步骤7: 输入群名称
+      console.log('\n=== 步骤7: 设置群名称 ===')
+      const groupName = `${randomEmoji}邻家优选｜${processedStoreName}2群`
+      console.log(`群名称: ${groupName}`)
+
+      await this.waitAndFill(
+        page,
+        '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > input',
+        groupName,
+        10000,
+        '群名称输入框',
+      )
+      await this.wait(1000) // 等待群名称输入完成并验证
+
+      // 步骤8: 点击群名称确认按钮
+      console.log('\n=== 步骤8: 确认群名称设置 ===')
+      await this.waitAndClick(
+        page,
+        '#__dialog__MNDialog__ > div > div.qui_dialog_foot.ww_dialog_foot > a.qui_btn.ww_btn.ww_btn_Blue',
+        10000,
+        '群名称确认按钮',
+      )
+      await this.wait(3000) // 等待群名称确认并返回主配置页面
+
+      // 步骤9: 点击使用模板
+      console.log('\n=== 步骤9: 点击使用模板 ===')
+      await this.waitAndClick(
+        page,
+        '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(3) > div.csPlugin_mod_item_content > div.csPlugin_mod_item_row.js_csPlugin_mod_item_set.csPlugin_mod_item_set > a',
+        10000,
+        '使用模板按钮',
+      )
+      await this.wait(1500) // 等待模板选择弹框出现
+
+      // 步骤10: 查找并选择模板
+      console.log('\n=== 步骤10: 选择模板 ===')
+      const templateName = `${param.storeType}活码通用`
+      console.log(`目标模板名称: ${templateName}`)
+
+      const templateElement = await this.findTemplateElement(page, templateName, 15000)
+      if (!templateElement) {
+        return {
+          success: false,
+          message: `未找到模板: ${templateName}`,
+        }
+      }
+
+      await templateElement.click()
+      console.log(`✓ 已选择模板: ${templateName}`)
+      await templateElement.dispose() // 释放资源
+      await this.wait(1500) // 等待模板选择状态更新
+
+      // 步骤11: 点击使用该模板
+      console.log('\n=== 步骤11: 确认使用模板 ===')
+      await this.waitAndClick(
+        page,
+        '#__dialog__MNDialog__ > div > div:nth-child(3) > a:nth-child(2)',
+        10000,
+        '使用该模板按钮',
+      )
+      await this.wait(2500) // 等待模板应用到配置中
+
+      // 步骤12: 填写后续新建群名
+      console.log('\n=== 步骤12: 设置后续新建群名 ===')
+      const subsequentGroupName = `${randomEmoji}邻家优选｜${processedStoreName}`
+      console.log(`后续群名称: ${subsequentGroupName}`)
+
+      await this.waitAndFill(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(3) > div:nth-child(2) > div:nth-child(3) > div:nth-child(1) > input',
+        subsequentGroupName,
+        10000,
+        '后续新建群名输入框',
+      )
+      await this.wait(800) // 等待输入完成
+
+      // 步骤13: 确保群序号单选框勾选
+      console.log('\n=== 步骤13: 确保群序号选项勾选 ===')
+      const checkboxResult = await this.smartClickCheckbox(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(3) > div:nth-child(2) > div:nth-child(3) > div:nth-child(2) > input:nth-child(1)',
+        10000,
+        '群序号单选框',
+      )
+
+      if (!checkboxResult) {
+        console.warn('⚠️ 群序号单选框可能未正确勾选，但继续执行')
+      }
+
+      await this.wait(500) // 等待选项状态更新
+
+      // 步骤14: 调整序号为3
+      console.log('\n=== 步骤14: 设置序号为3 ===')
+      await this.waitAndFill(
+        page,
+        '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(3) > div.csPlugin_mod_item_content > div.csPlugin_mod_item_wrapper > div.csPlugin_line > input.csPlugin_mod_index_input',
+        '3',
+        10000,
+        '序号输入框',
+      )
+      await this.wait(600) // 等待序号输入完成
+
+      // 步骤15: 填写群备注
+      console.log('\n=== 步骤15: 填写群备注 ===')
+      const groupNote = `${processedStoreName}LJYX`
+      console.log(`群备注: ${groupNote}`)
+
+      await this.waitAndFill(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(4) > div:nth-child(2) > div > input',
+        groupNote,
+        10000,
+        '群备注输入框',
+      )
+      await this.wait(800) // 等待备注输入完成
+
+      // 步骤16: 点击创建按钮
+      console.log('\n=== 步骤16: 创建群活码 ===')
+      await this.waitAndClick(
+        page,
+        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(5) > a',
+        15000,
+        '创建按钮',
+      )
+      await this.wait(4000) // 等待创建过程完成，给服务器更多处理时间
+
+      // 步骤17: 等待跳转到二维码页面并保存二维码
+      console.log('\n=== 步骤17: 保存二维码 ===')
+
+      // 等待跳转到成功页面
+      const qrCodePagePattern = 'https://work.weixin.qq.com/wework_admin/frame#chatGroup/intro'
+      const reachedQrCodePage = await this.waitForTargetPage(page, qrCodePagePattern, {
+        timeout: 15000,
+        interval: 1000,
+      })
+
+      let qrCodeSaved = false
+      let qrCodePath = ''
+      let qrCodeSaveMethod = ''
+
+      if (!reachedQrCodePage) {
+        console.warn('⚠️ 未能跳转到二维码页面，但群活码可能已创建成功')
+      } else {
+        try {
+          // 等待二维码图片加载
+          console.log('等待二维码图片加载...')
+          await this.waitForElement(
+            page,
+            '#js_chatGroupIntro60 > div > div.app_stage > div > div > div:nth-child(2) > img',
+            10000,
+            '二维码图片',
+          )
+
+          // 获取环境变量和生成文件路径
+          const qrCodeBasePath = config.QRCODE_TARGET_STORE_PATH || './qr-codes'
+          const timestamp = new Date()
+            .toLocaleString('zh-CN', {
+              timeZone: 'Asia/Shanghai',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            })
+            .replace(/[/\s:]/g, '_')
+          const folderName = `${processedStoreName}_${timestamp}`
+          const qrCodeDir = `${qrCodeBasePath}/${folderName}`
+          qrCodePath = `${qrCodeDir}/groupqrcode.png`
+
+          console.log(`二维码保存路径: ${qrCodePath}`)
+
+          // 获取二维码图片元素
+          const qrCodeElement = await page.$(
+            '#js_chatGroupIntro60 > div > div.app_stage > div > div > div:nth-child(2) > img',
+          )
+
+          if (!qrCodeElement) {
+            throw new Error('未找到二维码图片元素')
+          }
+
+          // 使用公共方法保存图片
+          const saveResult = await this.saveImageFromElement(qrCodeElement, qrCodePath, '二维码')
+
+          if (saveResult.success) {
+            qrCodeSaved = true
+            qrCodeSaveMethod = saveResult.method || ''
+          } else {
+            throw new Error(saveResult.error || '保存失败')
+          }
+
+          await qrCodeElement.dispose()
+        } catch (qrError) {
+          console.error(
+            `⚠️ 保存二维码失败: ${qrError instanceof Error ? qrError.message : '未知错误'}`,
+          )
+          qrCodeSaved = false
+        }
+      }
+
+      const executionTime = Date.now() - startTime
+      console.log(`\n✅ 群活码创建完成！耗时: ${executionTime}ms`)
+
+      return {
+        success: true,
+        message: '群活码创建成功',
+        data: {
+          storeName: param.storeName,
+          storeType: param.storeType,
+          assistant: param.assistant,
+          groupName,
+          subsequentGroupName,
+          groupNote,
+          templateName,
+          executionTime,
+          randomEmoji,
+          qrCodeSaved,
+          qrCodePath: qrCodeSaved ? qrCodePath : '',
+          qrCodeSaveMethod: qrCodeSaved ? qrCodeSaveMethod : '',
+        },
+      }
+    } catch (error) {
+      const executionTime = Date.now() - startTime
+      console.error('创建群活码失败:', error)
+
+      return {
+        success: false,
+        message: `创建群活码失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        data: {
+          storeName: param.storeName,
+          storeType: param.storeType,
+          assistant: param.assistant,
+          executionTime,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }
+    }
+  }
 }
 
-// ;(async function () {
-//   const instance = WeworkManager.getInstance()
-//   await instance.checkWeWorkLogin()
-//   await instance.changeContactInfo({
-//     mobile: '13052828856',
-//     storeName: '楠子1',
-//     storeType: '店中店',
-//   })
-// })()
+;(async function () {
+  const instance = WeworkManager.getInstance()
+  await instance.checkWeWorkLogin()
+  await instance.createGroupLiveCode({
+    storeName: '楠子1店',
+    storeType: '店中店',
+    assistant: '楠子1店',
+  })
+  // await instance.forceCloseBrowser()
+})()
