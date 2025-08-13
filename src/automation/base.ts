@@ -1,5 +1,6 @@
 import * as puppeteer from 'puppeteer'
 import * as fs from 'fs'
+import * as path from 'path'
 import { BrowserInstance } from './browser-instance'
 
 export class BaseManager {
@@ -171,6 +172,34 @@ export class BaseManager {
         return false
       } catch (checkError) {
         console.warn(`检查xpath元素失败: ${xpath}`, checkError)
+        return false
+      }
+    }
+  }
+
+  /**
+   * 通过CSS selector轮询元素直到不存在
+   */
+  public async waitForSelectorDisappear(
+    page: puppeteer.Page,
+    selector: string,
+    timeout: number = 5000,
+  ): Promise<boolean> {
+    try {
+      await page.waitForSelector(selector, { timeout, hidden: true })
+      return true
+    } catch (error) {
+      // 如果waitForSelector超时，说明元素仍然存在，需要手动检查
+      try {
+        const element = await page.$(selector)
+        if (!element) {
+          return true
+        }
+        await element.dispose()
+        console.warn(`轮询超时，selector元素仍存在: ${selector}`)
+        return false
+      } catch (checkError) {
+        console.warn(`检查selector元素失败: ${selector}`, checkError)
         return false
       }
     }
@@ -527,6 +556,361 @@ export class BaseManager {
       return trimmedName
     } else {
       return trimmedName + '店'
+    }
+  }
+
+  /**
+   * 文件上传方法 - 支持直接上传和FileChooser两种方式
+   * @param page 页面实例
+   * @param selector 文件输入框选择器或触发按钮选择器
+   * @param filePath 要上传的文件路径
+   * @param useFileChooser 是否使用FileChooser API（默认false，直接上传）
+   * @param timeout 超时时间
+   * @param description 描述信息用于日志
+   */
+  public async uploadFileToElement(
+    page: puppeteer.Page,
+    selector: string,
+    filePath: string,
+    useFileChooser: boolean = false,
+    timeout: number = 10000,
+    description?: string,
+  ): Promise<void> {
+    try {
+      console.log(`开始上传${description ? ` ${description}` : ''}文件: ${filePath}`)
+
+      // 检查文件是否存在
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`文件不存在: ${filePath}`)
+      }
+
+      if (useFileChooser) {
+        // 方式1: 使用FileChooser API
+        console.log(`使用FileChooser API上传文件...`)
+
+        const [fileChooser] = await Promise.all([
+          page.waitForFileChooser(),
+          this.waitAndClick(
+            page,
+            selector,
+            timeout,
+            description ? `${description}触发按钮` : '触发按钮',
+          ),
+        ])
+
+        await fileChooser.accept([filePath])
+        console.log(`✓ 文件上传成功 (FileChooser API)`)
+      } else {
+        // 方式2: 直接上传到input元素
+        console.log(`直接上传到input元素...`)
+
+        await this.waitForElement(
+          page,
+          selector,
+          timeout,
+          description ? `${description}文件输入框` : '文件输入框',
+        )
+        const fileInput = await page.$(selector)
+
+        if (!fileInput) {
+          throw new Error(`未找到文件输入框: ${selector}`)
+        }
+
+        await (fileInput as any).uploadFile(filePath)
+        await fileInput.dispose()
+        console.log(`✓ 文件上传成功 (直接上传)`)
+      }
+
+      // 等待文件处理完成
+      await this.wait(2000)
+    } catch (error) {
+      throw new Error(
+        `上传${description ? ` ${description}` : ''}文件失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      )
+    }
+  }
+
+  /**
+   * 检查并确保开关处于指定状态
+   * @param page 页面实例
+   * @param switchSelector 开关选择器
+   * @param targetState 目标状态 (true=开启, false=关闭)
+   * @param timeout 超时时间
+   * @param description 描述信息用于日志
+   */
+  public async ensureSwitchState(
+    page: puppeteer.Page,
+    switchSelector: string,
+    targetState: boolean,
+    timeout: number = 10000,
+    description?: string,
+  ): Promise<void> {
+    try {
+      console.log(
+        `检查${description ? ` ${description}` : ''}开关状态，目标: ${targetState ? '开启' : '关闭'}`,
+      )
+
+      // 等待开关元素出现
+      await this.waitForElement(
+        page,
+        switchSelector,
+        timeout,
+        description ? `${description}开关` : '开关',
+      )
+
+      // 检查当前状态
+      const currentState = await page.evaluate((selector) => {
+        const element = document.querySelector(selector)
+        if (!element) return false
+
+        // 方法1: 检查常见的开关类名
+        const classList = element.classList
+        if (
+          classList.contains('ame-switch-checked') ||
+          classList.contains('checked') ||
+          classList.contains('active') ||
+          classList.contains('on')
+        ) {
+          return true
+        }
+
+        // 方法2: 检查aria-checked属性
+        const ariaChecked = element.getAttribute('aria-checked')
+        if (ariaChecked === 'true') return true
+
+        // 方法3: 检查子元素是否有选中状态
+        const checkedChild = element.querySelector('.ame-switch-checked, .checked, .active')
+        if (checkedChild) return true
+
+        return false
+      }, switchSelector)
+
+      console.log(
+        `${description ? ` ${description}` : ''}开关当前状态: ${currentState ? '开启' : '关闭'}`,
+      )
+
+      // 如果状态不匹配，则点击切换
+      if (currentState !== targetState) {
+        console.log(`开关状态不匹配，正在${targetState ? '开启' : '关闭'}...`)
+        await this.waitAndClick(
+          page,
+          switchSelector,
+          timeout,
+          description ? `${description}开关` : '开关',
+        )
+
+        // 等待状态更新
+        await this.wait(500)
+
+        // 验证状态是否已更改
+        const newState = await page.evaluate((selector) => {
+          const element = document.querySelector(selector)
+          if (!element) return false
+
+          const classList = element.classList
+          if (
+            classList.contains('ame-switch-checked') ||
+            classList.contains('checked') ||
+            classList.contains('active') ||
+            classList.contains('on')
+          ) {
+            return true
+          }
+
+          const ariaChecked = element.getAttribute('aria-checked')
+          if (ariaChecked === 'true') return true
+
+          const checkedChild = element.querySelector('.ame-switch-checked, .checked, .active')
+          if (checkedChild) return true
+
+          return false
+        }, switchSelector)
+
+        if (newState === targetState) {
+          console.log(
+            `✓ ${description ? ` ${description}` : ''}开关已成功${targetState ? '开启' : '关闭'}`,
+          )
+        } else {
+          console.warn(`⚠️ ${description ? ` ${description}` : ''}开关状态可能未正确切换`)
+        }
+      } else {
+        console.log(`✓ ${description ? ` ${description}` : ''}开关已处于目标状态`)
+      }
+    } catch (error) {
+      throw new Error(
+        `设置${description ? ` ${description}` : ''}开关状态失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      )
+    }
+  }
+
+  /**
+   * 输入带换行符的文本内容到指定元素
+   * @param page 页面实例
+   * @param selector 元素选择器
+   * @param text 要输入的文本（可包含换行符）
+   * @param timeout 超时时间
+   * @param description 描述信息用于日志
+   */
+  public async typeTextWithNewlines(
+    page: puppeteer.Page,
+    selector: string,
+    text: string,
+    timeout: number = 10000,
+    description?: string,
+  ): Promise<void> {
+    try {
+      console.log(`输入${description ? ` ${description}` : ''}文本内容`)
+
+      // 等待并聚焦到元素
+      await this.waitForElement(page, selector, timeout, description)
+      await page.click(selector)
+      await this.wait(300)
+
+      // 将文本按换行符分割
+      const lines = text.split('\n')
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+
+        // 输入当前行的文本
+        if (line) {
+          await page.keyboard.type(line)
+        }
+
+        // 如果不是最后一行，按回车键
+        if (i < lines.length - 1) {
+          await page.keyboard.press('Enter')
+          await this.wait(100) // 短暂等待确保回车生效
+        }
+      }
+
+      console.log(`✓ 成功输入${description ? ` ${description}` : ''}文本内容`)
+      await this.wait(300)
+    } catch (error) {
+      throw new Error(
+        `输入${description ? ` ${description}` : ''}文本内容失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      )
+    }
+  }
+
+  /**
+   * 设置网络请求拦截
+   * @param page 页面实例
+   * @param interceptRequests 是否拦截请求（默认false，仅监听）
+   */
+  public async setupNetworkInterception(
+    page: puppeteer.Page,
+    interceptRequests: boolean = false,
+  ): Promise<void> {
+    try {
+      console.log('设置网络请求监听...')
+
+      if (interceptRequests) {
+        await page.setRequestInterception(true)
+
+        page.on('request', (request) => {
+          console.log(`请求: ${request.method()} ${request.url()}`)
+          request.continue()
+        })
+      }
+
+      page.on('response', (response) => {})
+
+      console.log('✓ 网络监听设置完成')
+    } catch (error) {
+      console.warn('设置网络监听失败:', error)
+      throw new Error(`设置网络监听失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  /**
+   * 等待特定API响应并返回数据
+   * @param page 页面实例
+   * @param apiPattern API路径匹配模式
+   * @param timeout 超时时间（毫秒）
+   * @param description 描述信息
+   */
+  public async waitForApiResponse<T = any>(
+    page: puppeteer.Page,
+    apiPattern: string,
+    timeout: number = 30000,
+    description?: string,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      console.log(`开始等待${description ? ` ${description}` : ''}API响应: ${apiPattern}`)
+
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`等待${description ? ` ${description}` : ''}API响应超时: ${apiPattern}`))
+      }, timeout)
+
+      const responseHandler = async (response: puppeteer.HTTPResponse) => {
+        try {
+          if (response.url().includes(apiPattern)) {
+            console.log(`✓ 捕获到${description ? ` ${description}` : ''}API响应: ${response.url()}`)
+
+            const contentType = response.headers()['content-type']
+            let responseData: T
+
+            if (contentType && contentType.includes('application/json')) {
+              responseData = await response.json()
+            } else {
+              responseData = (await response.text()) as T
+            }
+
+            clearTimeout(timeoutId)
+            page.off('response', responseHandler)
+            resolve(responseData)
+          }
+        } catch (error) {
+          clearTimeout(timeoutId)
+          page.off('response', responseHandler)
+          reject(
+            new Error(`解析API响应失败: ${error instanceof Error ? error.message : '未知错误'}`),
+          )
+        }
+      }
+
+      page.on('response', responseHandler)
+    })
+  }
+
+  /**
+   * 从URL下载图片到本地文件
+   * @param imageUrl 图片URL
+   * @param savePath 保存路径
+   * @param description 描述信息
+   */
+  public async downloadImageFromUrl(
+    imageUrl: string,
+    savePath: string,
+    description?: string,
+  ): Promise<string> {
+    try {
+      console.log(`开始下载${description ? ` ${description}` : ''}图片: ${imageUrl}`)
+
+      // 创建保存目录
+      const saveDir = path.dirname(savePath)
+      await fs.promises.mkdir(saveDir, { recursive: true })
+
+      // 使用fetch下载图片
+      const response = await fetch(imageUrl)
+      if (!response.ok) {
+        throw new Error(`HTTP请求失败: ${response.status} ${response.statusText}`)
+      }
+
+      // 获取图片数据
+      const arrayBuffer = await response.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      // 保存到本地文件
+      await fs.promises.writeFile(savePath, buffer)
+
+      console.log(`✓ 成功下载${description ? ` ${description}` : ''}图片到: ${savePath}`)
+      return savePath
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      console.error(`下载${description ? ` ${description}` : ''}图片失败:`, errorMessage)
+      throw new Error(`下载图片失败: ${errorMessage}`)
     }
   }
 }

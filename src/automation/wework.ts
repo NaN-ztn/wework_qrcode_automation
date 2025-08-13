@@ -217,7 +217,8 @@ export class WeworkManager extends BaseManager {
 
       // 步骤4: 更新姓名
       console.log('步骤4: 更新用户姓名...')
-      const processedStoreName = this.processStoreName(param.storeName)
+      const processedStoreName =
+        this.processStoreName(param.storeName) + (param.storeType === '店中店' ? '店小二' : '')
       console.log(`处理后的门店名称: ${processedStoreName}`)
 
       const usernameInputXpath = '//*[@id="username"]'
@@ -797,6 +798,7 @@ export class WeworkManager extends BaseManager {
       let qrCodeSaved = false
       let qrCodePath = ''
       let qrCodeSaveMethod = ''
+      let qrCodeDir = ''
 
       if (!reachedQrCodePage) {
         console.warn('⚠️ 未能跳转到二维码页面，但群活码可能已创建成功')
@@ -826,7 +828,7 @@ export class WeworkManager extends BaseManager {
             })
             .replace(/[/\s:]/g, '_')
           const folderName = `${processedStoreName}_${timestamp}`
-          const qrCodeDir = `${qrCodeBasePath}/${folderName}`
+          qrCodeDir = `${qrCodeBasePath}/${folderName}`
           qrCodePath = `${qrCodeDir}/groupqrcode.png`
 
           console.log(`二维码保存路径: ${qrCodePath}`)
@@ -876,6 +878,7 @@ export class WeworkManager extends BaseManager {
           executionTime,
           randomEmoji,
           qrCodeSaved,
+          qrCodeDir: qrCodeSaved ? qrCodeDir : '',
           qrCodePath: qrCodeSaved ? qrCodePath : '',
           qrCodeSaveMethod: qrCodeSaved ? qrCodeSaveMethod : '',
         },
@@ -899,13 +902,13 @@ export class WeworkManager extends BaseManager {
   }
 }
 
-;(async function () {
-  const instance = WeworkManager.getInstance()
-  await instance.checkWeWorkLogin()
-  await instance.createGroupLiveCode({
-    storeName: '楠子1店',
-    storeType: '店中店',
-    assistant: '楠子1店',
-  })
-  // await instance.forceCloseBrowser()
-})()
+// ;(async function () {
+//   const instance = WeworkManager.getInstance()
+//   await instance.checkWeWorkLogin()
+//   await instance.createGroupLiveCode({
+//     storeName: '楠子1店',
+//     storeType: '店中店',
+//     assistant: '楠子1店',
+//   })
+//   await instance.forceCloseBrowser()
+// })()

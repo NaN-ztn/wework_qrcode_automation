@@ -75,7 +75,6 @@
                     <h2>环境配置管理</h2>
                     <div class="config-actions">
                         <button id="saveConfigBtn" class="btn btn-primary">保存配置</button>
-                        <button id="resetConfigBtn" class="btn btn-secondary">重置默认</button>
                     </div>
                 </div>
                 
@@ -95,7 +94,77 @@
                         <div class="form-group">
                             <label for="weworkContactUrl">企业微信通讯录链接</label>
                             <input type="url" id="weworkContactUrl" name="WEWORK_CONTACT_URL" required>
-                            <small class="form-text">请输入企业微信通讯录页面的完整URL</small>
+                            <small class="form-text">企业微信通讯录页面的完整URL</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weworkCreateGroupUrl">群活码创建链接</label>
+                            <input type="url" id="weworkCreateGroupUrl" name="WEWORK_CREATE_GROUP_LIVE_CODE_URL" required>
+                            <small class="form-text">企业微信群活码创建页面的完整URL</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="userDataDir">用户数据目录</label>
+                            <input type="text" id="userDataDir" name="USER_DATA_DIR" required>
+                            <small class="form-text">浏览器数据存储目录，支持~表示用户主目录</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="storeAvatarPath">门店头像路径</label>
+                            <input type="text" id="storeAvatarPath" name="STORE_AVATAR_PATH" required>
+                            <small class="form-text">门店头像文件的本地路径</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="qrCodeStorePath">二维码存储路径</label>
+                            <input type="text" id="qrCodeStorePath" name="QRCODE_TARGET_STORE_PATH" required>
+                            <small class="form-text">二维码文件的存储根目录</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weibanDashboard">微伴首页链接</label>
+                            <input type="url" id="weibanDashboard" name="WEIBAN_DASHBOARD_URL" required>
+                            <small class="form-text">微伴助手首页的完整URL</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weibanQrCreate">微伴活码创建链接</label>
+                            <input type="url" id="weibanQrCreate" name="WEIBAN_QR_CREATE_URL" required>
+                            <small class="form-text">微伴渠道活码创建页面的完整URL</small>
+                        </div>
+                    </div>
+
+                    <!-- 消息模板配置 -->
+                    <div class="config-section">
+                        <h3>消息模板配置</h3>
+                        <div class="form-group">
+                            <label for="weibanWelcomeMsg">店中店欢迎语</label>
+                            <textarea id="weibanWelcomeMsg" name="WEIBAN_WELCOME_MSG" rows="4" required></textarea>
+                            <small class="form-text">支持{{storeName}}变量和\n换行符</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weibanWelcomeMsgIndependent">独立店欢迎语</label>
+                            <textarea id="weibanWelcomeMsgIndependent" name="WEIBAN_WELCOME_MSG_INDEPENDENT" rows="4" required></textarea>
+                            <small class="form-text">支持{{storeName}}变量和\n换行符</small>
+                        </div>
+                    </div>
+
+                    <!-- 用户数据配置 -->
+                    <div class="config-section">
+                        <h3>用户数据配置</h3>
+                        <div class="form-group">
+                            <label for="userMappings">可用助手名单</label>
+                            <div class="list-input-container">
+                                <div id="userMappingsList" class="list-items"></div>
+                                <div class="list-input-row">
+                                    <input type="text" id="newUserMapping" placeholder="输入助手名称">
+                                    <button type="button" id="addUserMapping" class="btn btn-small">添加</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="storeTypes">店铺类型选项</label>
+                            <div class="list-input-container">
+                                <div id="storeTypesList" class="list-items"></div>
+                                <div class="list-input-row">
+                                    <input type="text" id="newStoreType" placeholder="输入店铺类型">
+                                    <button type="button" id="addStoreType" class="btn btn-small">添加</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </form>

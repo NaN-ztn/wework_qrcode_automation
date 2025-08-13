@@ -24,7 +24,17 @@ class RendererApp {
   // 配置表单元素
   private configForm!: HTMLFormElement
   private saveConfigBtn!: HTMLButtonElement
-  private resetConfigBtn!: HTMLButtonElement
+
+  // 数组配置元素
+  private userMappingsList!: HTMLDivElement
+  private storeTypesList!: HTMLDivElement
+  private newUserMappingInput!: HTMLInputElement
+  private newStoreTypeInput!: HTMLInputElement
+  private addUserMappingBtn!: HTMLButtonElement
+  private addStoreTypeBtn!: HTMLButtonElement
+
+  // 当前配置数据
+  private currentConfig: any = null
 
   // 日志控制元素
   private clearLogsBtn!: HTMLButtonElement
@@ -67,7 +77,14 @@ class RendererApp {
     // 配置表单元素
     this.configForm = document.getElementById('configForm') as HTMLFormElement
     this.saveConfigBtn = document.getElementById('saveConfigBtn') as HTMLButtonElement
-    this.resetConfigBtn = document.getElementById('resetConfigBtn') as HTMLButtonElement
+
+    // 数组配置元素
+    this.userMappingsList = document.getElementById('userMappingsList') as HTMLDivElement
+    this.storeTypesList = document.getElementById('storeTypesList') as HTMLDivElement
+    this.newUserMappingInput = document.getElementById('newUserMapping') as HTMLInputElement
+    this.newStoreTypeInput = document.getElementById('newStoreType') as HTMLInputElement
+    this.addUserMappingBtn = document.getElementById('addUserMapping') as HTMLButtonElement
+    this.addStoreTypeBtn = document.getElementById('addStoreType') as HTMLButtonElement
 
     // 日志控制元素
     this.clearLogsBtn = document.getElementById('clearLogsBtn') as HTMLButtonElement
@@ -84,7 +101,16 @@ class RendererApp {
 
     // 配置管理
     this.saveConfigBtn.addEventListener('click', () => this.saveConfig())
-    this.resetConfigBtn.addEventListener('click', () => this.resetConfig())
+
+    // 数组配置管理
+    this.addUserMappingBtn.addEventListener('click', () => this.addUserMapping())
+    this.addStoreTypeBtn.addEventListener('click', () => this.addStoreType())
+    this.newUserMappingInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.addUserMapping()
+    })
+    this.newStoreTypeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.addStoreType()
+    })
 
     // 日志控制
     this.clearLogsBtn.addEventListener('click', () => this.clearLogs())
@@ -116,6 +142,7 @@ class RendererApp {
     try {
       const result = await window.electronAPI.getConfig()
       if (result.success && result.config) {
+        this.currentConfig = result.config
         this.populateConfigForm(result.config)
         this.addLog('配置文件加载成功', 'info')
       } else {
@@ -133,6 +160,75 @@ class RendererApp {
     // 自动化配置
     ;(document.getElementById('weworkContactUrl') as HTMLInputElement).value =
       config.WEWORK_CONTACT_URL || ''
+    ;(document.getElementById('weworkCreateGroupUrl') as HTMLInputElement).value =
+      config.WEWORK_CREATE_GROUP_LIVE_CODE_URL || ''
+    ;(document.getElementById('userDataDir') as HTMLInputElement).value = config.USER_DATA_DIR || ''
+    ;(document.getElementById('storeAvatarPath') as HTMLInputElement).value =
+      config.STORE_AVATAR_PATH || ''
+    ;(document.getElementById('qrCodeStorePath') as HTMLInputElement).value =
+      config.QRCODE_TARGET_STORE_PATH || ''
+    ;(document.getElementById('weibanDashboard') as HTMLInputElement).value =
+      config.WEIBAN_DASHBOARD_URL || ''
+    ;(document.getElementById('weibanQrCreate') as HTMLInputElement).value =
+      config.WEIBAN_QR_CREATE_URL || ''
+
+    // 消息模板配置
+    ;(document.getElementById('weibanWelcomeMsg') as HTMLTextAreaElement).value =
+      config.WEIBAN_WELCOME_MSG || ''
+    ;(document.getElementById('weibanWelcomeMsgIndependent') as HTMLTextAreaElement).value =
+      config.WEIBAN_WELCOME_MSG_INDEPENDENT || ''
+
+    // 用户数据配置 - 数组类型
+    this.populateArrayField('userMappings', config.USER_MAPPINGS || [])
+    this.populateArrayField('storeTypes', config.STORE_TYPE || [])
+  }
+
+  private populateArrayField(fieldName: string, values: string[]): void {
+    const container = fieldName === 'userMappings' ? this.userMappingsList : this.storeTypesList
+    container.innerHTML = ''
+
+    values.forEach((value) => {
+      this.addArrayItem(fieldName, value)
+    })
+  }
+
+  private addArrayItem(fieldName: string, value: string): void {
+    const container = fieldName === 'userMappings' ? this.userMappingsList : this.storeTypesList
+    const item = document.createElement('div')
+    item.className = 'list-item'
+    item.innerHTML = `
+      <span class="list-item-text">${value}</span>
+      <button type="button" class="btn btn-small btn-danger remove-item">删除</button>
+    `
+
+    const removeBtn = item.querySelector('.remove-item') as HTMLButtonElement
+    removeBtn.addEventListener('click', () => {
+      item.remove()
+    })
+
+    container.appendChild(item)
+  }
+
+  private addUserMapping(): void {
+    const value = this.newUserMappingInput.value.trim()
+    if (value) {
+      this.addArrayItem('userMappings', value)
+      this.newUserMappingInput.value = ''
+    }
+  }
+
+  private addStoreType(): void {
+    const value = this.newStoreTypeInput.value.trim()
+    if (value) {
+      this.addArrayItem('storeTypes', value)
+      this.newStoreTypeInput.value = ''
+    }
+  }
+
+  private getArrayFieldValues(fieldName: string): string[] {
+    const container = fieldName === 'userMappings' ? this.userMappingsList : this.storeTypesList
+    const items = container.querySelectorAll('.list-item-text')
+    return Array.from(items).map((item) => item.textContent || '')
   }
 
   private async saveConfig(): Promise<void> {
@@ -145,6 +241,10 @@ class RendererApp {
         config[key] = value
       })
 
+      // 处理数组字段
+      config.USER_MAPPINGS = this.getArrayFieldValues('userMappings')
+      config.STORE_TYPE = this.getArrayFieldValues('storeTypes')
+
       this.saveConfigBtn.disabled = true
       this.saveConfigBtn.textContent = '保存中...'
 
@@ -152,6 +252,10 @@ class RendererApp {
 
       if (result.success) {
         this.addLog(result.message, 'success')
+        this.currentConfig = config // 更新当前配置缓存
+
+        // 显示保存成功的提示
+        this.showConfigSaveSuccess()
       } else {
         this.addLog(result.message, 'error')
       }
@@ -163,25 +267,64 @@ class RendererApp {
     }
   }
 
-  private async resetConfig(): Promise<void> {
-    try {
-      this.resetConfigBtn.disabled = true
-      this.resetConfigBtn.textContent = '重置中...'
+  private showConfigSaveSuccess(): void {
+    // 创建提示元素
+    const notification = document.createElement('div')
+    notification.className = 'config-save-notification'
+    notification.innerHTML = `
+      <div class="notification-content">
+        <span class="notification-icon">✅</span>
+        <span class="notification-text">配置保存成功！</span>
+      </div>
+    `
 
-      const result = await window.electronAPI.resetConfig()
+    // 添加样式
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4caf50;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 10000;
+      animation: slideIn 0.3s ease-out;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    `
 
-      if (result.success) {
-        this.addLog(result.message, 'success')
-        await this.loadConfig() // 重新加载配置到表单
-      } else {
-        this.addLog(result.message, 'error')
+    // 添加动画样式
+    const style = document.createElement('style')
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
       }
-    } catch (error) {
-      this.addLog('重置配置失败: ' + error, 'error')
-    } finally {
-      this.resetConfigBtn.disabled = false
-      this.resetConfigBtn.textContent = '重置默认'
+      @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
+    `
+    if (!document.head.querySelector('style[data-config-notification]')) {
+      style.setAttribute('data-config-notification', 'true')
+      document.head.appendChild(style)
     }
+
+    // 添加到页面
+    document.body.appendChild(notification)
+
+    // 3秒后自动消失
+    setTimeout(() => {
+      notification.style.animation = 'slideOut 0.3s ease-out forwards'
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification)
+        }
+      }, 300)
+    }, 3000)
   }
 
   private async checkWeWorkLogin(): Promise<void> {

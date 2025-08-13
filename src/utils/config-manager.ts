@@ -17,9 +17,16 @@ export interface AppConfig {
   USER_DATA_DIR: string
   STORE_AVATAR_PATH: string
   QRCODE_TARGET_STORE_PATH: string
+  WEIBAN_DASHBOARD_URL: string
+  WEIBAN_QR_CREATE_URL: string
 
-  // 用户映射配置
-  USER_MAPPINGS: UserMapping[]
+  // 消息模板配置
+  WEIBAN_WELCOME_MSG: string
+  WEIBAN_WELCOME_MSG_INDEPENDENT: string
+
+  // 用户数据配置
+  USER_MAPPINGS: string[]
+  STORE_TYPE: string[]
 }
 
 export class ConfigManager {
@@ -51,13 +58,21 @@ export class ConfigManager {
       // 自动化配置
       WEWORK_CONTACT_URL: 'https://work.weixin.qq.com/wework_admin/frame#/contacts',
       WEWORK_CREATE_GROUP_LIVE_CODE_URL:
-        'https://work.weixin.qq.com/wework_admin/frame#/create_group_live_code',
+        'https://work.weixin.qq.com/wework_admin/frame#/chatGroup/create/qrCode',
       USER_DATA_DIR: path.join(os.homedir(), '.wework-automation', 'chrome-data'),
       STORE_AVATAR_PATH: path.join(process.cwd(), 'assets', 'store_avatar.PNG'),
-      QRCODE_TARGET_STORE_PATH: path.join(process.cwd(), '.wework-automation', 'qr_code'),
+      QRCODE_TARGET_STORE_PATH: path.join('/tmp', 'wework-automation', 'qr_code'),
+      WEIBAN_DASHBOARD_URL: 'https://weibanzhushou.com/dashboard',
+      WEIBAN_QR_CREATE_URL:
+        'https://weibanzhushou.com/dashboard/qr/create?isQr=1&groupId=101380218',
 
-      // 用户映射配置
+      // 消息模板配置
+      WEIBAN_WELCOME_MSG: '欢迎来到{{storeName}}，为您提供优质的产品和服务。',
+      WEIBAN_WELCOME_MSG_INDEPENDENT: '欢迎来到{{storeName}}，为您提供优质的产品和服务。',
+
+      // 用户数据配置
       USER_MAPPINGS: [],
+      STORE_TYPE: ['店中店', '独立店'],
     }
   }
 
@@ -70,12 +85,16 @@ export class ConfigManager {
     }
 
     // 处理路径相关配置，支持 ~ 符号
-    if (key === 'USER_DATA_DIR' || key === 'STORE_AVATAR_PATH') {
+    if (
+      key === 'USER_DATA_DIR' ||
+      key === 'STORE_AVATAR_PATH' ||
+      key === 'QRCODE_TARGET_STORE_PATH'
+    ) {
       return value.startsWith('~') ? path.join(os.homedir(), value.slice(1)) : value
     }
 
     // 处理JSON数组配置
-    if (key === 'USER_MAPPINGS') {
+    if (key === 'USER_MAPPINGS' || key === 'STORE_TYPE') {
       try {
         const parsed = JSON.parse(value)
         return Array.isArray(parsed) ? parsed : defaultValue
@@ -185,14 +204,35 @@ export class ConfigManager {
       // 自动化配置
       lines.push('# ==================== 自动化配置 ====================')
       lines.push(`WEWORK_CONTACT_URL=${config.WEWORK_CONTACT_URL}`)
+      lines.push(`WEWORK_CREATE_GROUP_LIVE_CODE_URL=${config.WEWORK_CREATE_GROUP_LIVE_CODE_URL}`)
+      lines.push('')
+      lines.push('# 浏览器用户数据目录')
       lines.push(`USER_DATA_DIR=${config.USER_DATA_DIR}`)
+      lines.push('# 企业微信二维码头像路径')
       lines.push(`STORE_AVATAR_PATH=${config.STORE_AVATAR_PATH}`)
+      lines.push('# 二维码存储目标路径')
+      lines.push(`QRCODE_TARGET_STORE_PATH=${config.QRCODE_TARGET_STORE_PATH}`)
+      lines.push('# 微伴首页')
+      lines.push(`WEIBAN_DASHBOARD_URL=${config.WEIBAN_DASHBOARD_URL}`)
+      lines.push('# 微伴渠道活码创建')
+      lines.push(`WEIBAN_QR_CREATE_URL=${config.WEIBAN_QR_CREATE_URL}`)
       lines.push('')
 
-      // 用户映射配置
-      lines.push('# ==================== 用户映射配置 ====================')
-      lines.push('# 用户名与企微ID映射关系，JSON数组格式')
+      // 消息模板配置
+      lines.push('# ==================== 消息模板配置 ====================')
+      lines.push('# 店中店欢迎语')
+      lines.push(`WEIBAN_WELCOME_MSG=${config.WEIBAN_WELCOME_MSG}`)
+      lines.push('')
+      lines.push('# 独立店欢迎语')
+      lines.push(`WEIBAN_WELCOME_MSG_INDEPENDENT=${config.WEIBAN_WELCOME_MSG_INDEPENDENT}`)
+      lines.push('')
+
+      // 用户数据配置
+      lines.push('# ==================== 用户数据配置 ====================')
+      lines.push('# 可用助手名单（JSON数组格式）')
       lines.push(`USER_MAPPINGS=${JSON.stringify(config.USER_MAPPINGS)}`)
+      lines.push('# 店铺类型选项（JSON数组格式）')
+      lines.push(`STORE_TYPE=${JSON.stringify(config.STORE_TYPE)}`)
 
       await fs.promises.writeFile(this.CONFIG_FILE, lines.join('\n'), 'utf8')
       console.log(`配置文件已保存到: ${this.CONFIG_FILE}`)
