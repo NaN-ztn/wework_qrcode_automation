@@ -135,14 +135,16 @@
                         
                         <!-- 右侧：二维码展示 -->
                         <div class="qrcode-section">
-                            <h3>生成的二维码</h3>
+                            <div class="qrcode-header">
+                                <h3>生成的二维码</h3>
+                                <button class="btn-folder" id="openQrCodeFolder" style="display: none;" title="打开文件夹">
+                                    📁 打开文件夹
+                                </button>
+                            </div>
                             <div class="qrcode-grid">
                                 <div class="qrcode-item" id="weworkQrCode">
                                     <div class="qrcode-header">
                                         <h4>企业微信群码</h4>
-                                        <button class="btn-folder" id="openWeworkFolder" style="display: none;" title="打开文件夹">
-                                            📁
-                                        </button>
                                     </div>
                                     <div class="qrcode-preview">
                                         <div class="qrcode-placeholder">
@@ -155,9 +157,6 @@
                                 <div class="qrcode-item" id="weibanQrCode">
                                     <div class="qrcode-header">
                                         <h4>微伴活码</h4>
-                                        <button class="btn-folder" id="openWeibanFolder" style="display: none;" title="打开文件夹">
-                                            📁
-                                        </button>
                                     </div>
                                     <div class="qrcode-preview">
                                         <div class="qrcode-placeholder">

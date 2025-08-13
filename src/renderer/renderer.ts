@@ -48,8 +48,7 @@ class RendererApp {
   // 二维码相关元素
   private weworkQrImage!: HTMLImageElement
   private weibanQrImage!: HTMLImageElement
-  private openWeworkFolderBtn!: HTMLButtonElement
-  private openWeibanFolderBtn!: HTMLButtonElement
+  private openQrCodeFolderBtn!: HTMLButtonElement
 
   // 历史任务相关元素
   private refreshHistoryBtn!: HTMLButtonElement
@@ -131,8 +130,7 @@ class RendererApp {
     // 二维码相关元素
     this.weworkQrImage = document.getElementById('weworkQrImage') as HTMLImageElement
     this.weibanQrImage = document.getElementById('weibanQrImage') as HTMLImageElement
-    this.openWeworkFolderBtn = document.getElementById('openWeworkFolder') as HTMLButtonElement
-    this.openWeibanFolderBtn = document.getElementById('openWeibanFolder') as HTMLButtonElement
+    this.openQrCodeFolderBtn = document.getElementById('openQrCodeFolder') as HTMLButtonElement
 
     // 历史任务相关元素
     this.refreshHistoryBtn = document.getElementById('refreshHistoryBtn') as HTMLButtonElement
@@ -170,19 +168,22 @@ class RendererApp {
     // 历史任务控制
     this.refreshHistoryBtn.addEventListener('click', () => this.loadTaskHistory())
 
-    // 二维码文件夹打开
-    this.openWeworkFolderBtn.addEventListener('click', () =>
-      this.openQrCodeFolder(this.qrCodePaths.weworkQrPath),
-    )
-    this.openWeibanFolderBtn.addEventListener('click', () =>
-      this.openQrCodeFolder(this.qrCodePaths.weibanQrPath),
-    )
+    // 二维码文件夹打开 - 统一按钮，根据有哪个二维码来决定打开哪个文件夹
+    this.openQrCodeFolderBtn.addEventListener('click', () => {
+      const folderPath = this.qrCodePaths.weworkQrPath || this.qrCodePaths.weibanQrPath
+      if (folderPath) {
+        this.openQrCodeFolder(folderPath)
+      } else {
+        this.addLog('❌ 暂无二维码文件可打开', 'error')
+      }
+    })
 
     // 监听主进程日志和步骤更新
     this.setupMainProcessLogListener()
     this.setupStepUpdateListener()
     this.setupQrCodeUpdateListener()
     this.setupConfigUpdateListener()
+    this.setupButtonStateUpdateListener()
   }
 
   private switchTab(tab: 'main' | 'history' | 'config'): void {
@@ -645,8 +646,7 @@ class RendererApp {
     // 隐藏图片并显示占位符
     this.weworkQrImage.style.display = 'none'
     this.weibanQrImage.style.display = 'none'
-    this.openWeworkFolderBtn.style.display = 'none'
-    this.openWeibanFolderBtn.style.display = 'none'
+    this.openQrCodeFolderBtn.style.display = 'none'
 
     const placeholders = document.querySelectorAll('.qrcode-placeholder')
     placeholders.forEach((placeholder) => {
@@ -656,14 +656,12 @@ class RendererApp {
 
   private displayQrCode(type: 'wework' | 'weiban', imagePath: string): void {
     const imageElement = type === 'wework' ? this.weworkQrImage : this.weibanQrImage
-    const folderBtn = type === 'wework' ? this.openWeworkFolderBtn : this.openWeibanFolderBtn
     const placeholder = document.querySelector(`#${type}QrCode .qrcode-placeholder`) as HTMLElement
 
     if (imagePath && imagePath.trim()) {
       // 设置图片路径（使用file://协议）
       imageElement.src = `file://${imagePath}`
       imageElement.style.display = 'block'
-      folderBtn.style.display = 'block'
       placeholder.style.display = 'none'
 
       // 更新路径存储
@@ -672,6 +670,9 @@ class RendererApp {
       } else {
         this.qrCodePaths.weibanQrPath = imagePath
       }
+
+      // 显示统一的打开文件夹按钮
+      this.openQrCodeFolderBtn.style.display = 'block'
     }
   }
 
@@ -747,6 +748,39 @@ class RendererApp {
       this.initializeStoreForm()
 
       this.addLog('✅ 门店信息选项已更新', 'success')
+    })
+  }
+
+  private setupButtonStateUpdateListener(): void {
+    window.electronAPI.onButtonStateUpdate((data: { status: 'completed' | 'failed' }) => {
+      // 恢复按钮到初始状态
+      this.resetButtonStates()
+
+      if (data.status === 'completed') {
+        this.addLog('✅ 任务完成，浏览器已关闭', 'success')
+      } else {
+        this.addLog('❌ 任务失败，浏览器已关闭', 'error')
+      }
+    })
+  }
+
+  private resetButtonStates(): void {
+    // 恢复执行按钮状态
+    this.executeBtn.disabled = false
+    this.executeBtn.textContent = '▶ 执行任务'
+    this.executeBtn.classList.remove('running')
+
+    // 禁用停止按钮
+    this.stopBtn.disabled = true
+
+    // 重置运行状态
+    this.isRunning = false
+
+    // 重置所有步骤状态
+    this.steps.forEach((step, index) => {
+      step.status = 'pending'
+      step.message = '等待执行...'
+      this.updateStepUI(index + 1, 'pending', '等待执行...')
     })
   }
 

@@ -779,90 +779,72 @@ export class WeworkManager extends BaseManager {
       )
       await this.wait(800) // 等待备注输入完成
 
-      // 步骤16: 点击创建按钮
-      console.log('\n=== 步骤16: 创建群活码 ===')
-      await this.waitAndClick(
-        page,
-        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(5) > a',
-        15000,
-        '创建按钮',
-      )
-      await this.wait(4000) // 等待创建过程完成，给服务器更多处理时间
+      // 获取环境变量和生成文件路径
+      const qrCodeBasePath = config.QRCODE_TARGET_STORE_PATH || './qr-codes'
+      const timestamp = new Date()
+        .toLocaleString('zh-CN', {
+          timeZone: 'Asia/Shanghai',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })
+        .replace(/[/\s:]/g, '_')
+      const folderName = `${processedStoreName}_${timestamp}`
+      const qrCodeDir = `${qrCodeBasePath}/${folderName}`
+      const qrCodePath = `${qrCodeDir}/groupqrcode.png`
 
-      // 步骤17: 等待跳转到二维码页面并保存二维码
-      console.log('\n=== 步骤17: 保存二维码 ===')
+      console.log('\n=== 步骤16: 设置网络监听 ===')
+      console.log(`二维码保存路径: ${qrCodePath}`)
 
-      // 等待跳转到成功页面
-      const qrCodePagePattern = 'https://work.weixin.qq.com/wework_admin/frame#chatGroup/intro'
-      const reachedQrCodePage = await this.waitForTargetPage(page, qrCodePagePattern, {
-        timeout: 15000,
-        interval: 1000,
-      })
+      // 设置网络监听，准备捕获群活码创建API响应
+      await this.setupNetworkInterception(page, false)
 
+      // 步骤17: 点击创建按钮并等待API响应
+      console.log('\n=== 步骤17: 创建群活码并监听API响应 ===')
+      console.log('点击创建按钮，同时开始监听API响应...')
+
+      // 并行执行：点击按钮 + 等待API响应
+      const [apiResponse] = await Promise.all([
+        this.waitForApiResponse<any>(
+          page,
+          '/wework_admin/chatGroup/savePlugin',
+          30000,
+          '企业微信群活码创建',
+        ),
+        this.waitAndClick(
+          page,
+          '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(5) > a',
+          15000,
+          '创建按钮',
+        ),
+      ])
+
+      console.log('✓ 成功获取到群活码创建API响应')
+
+      // 步骤18: 解析API响应并下载二维码
+      console.log('\n=== 步骤18: 解析API响应并下载二维码 ===')
       let qrCodeSaved = false
-      let qrCodePath = ''
-      let qrCodeSaveMethod = ''
-      let qrCodeDir = ''
+      const qrCodeSaveMethod = 'network-request'
 
-      if (!reachedQrCodePage) {
-        console.warn('⚠️ 未能跳转到二维码页面，但群活码可能已创建成功')
-      } else {
-        try {
-          // 等待二维码图片加载
-          console.log('等待二维码图片加载...')
-          await this.waitForElement(
-            page,
-            '#js_chatGroupIntro60 > div > div.app_stage > div > div > div:nth-child(2) > img',
-            10000,
-            '二维码图片',
-          )
+      // 解析API响应获取二维码URL
+      let qrCodeUrl = ''
+      if (apiResponse && apiResponse.data && apiResponse.data.ctcode) {
+        qrCodeUrl = apiResponse.data.ctcode
+        console.log('✓ 从API响应中提取到二维码URL:', qrCodeUrl)
 
-          // 获取环境变量和生成文件路径
-          const qrCodeBasePath = config.QRCODE_TARGET_STORE_PATH || './qr-codes'
-          const timestamp = new Date()
-            .toLocaleString('zh-CN', {
-              timeZone: 'Asia/Shanghai',
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: false,
-            })
-            .replace(/[/\s:]/g, '_')
-          const folderName = `${processedStoreName}_${timestamp}`
-          qrCodeDir = `${qrCodeBasePath}/${folderName}`
-          qrCodePath = `${qrCodeDir}/groupqrcode.png`
+        // 使用网络请求下载二维码
+        const downloadedPath = await this.downloadImageFromUrl(qrCodeUrl, qrCodePath, '二维码')
 
-          console.log(`二维码保存路径: ${qrCodePath}`)
-
-          // 获取二维码图片元素
-          const qrCodeElement = await page.$(
-            '#js_chatGroupIntro60 > div > div.app_stage > div > div > div:nth-child(2) > img',
-          )
-
-          if (!qrCodeElement) {
-            throw new Error('未找到二维码图片元素')
-          }
-
-          // 使用公共方法保存图片
-          const saveResult = await this.saveImageFromElement(qrCodeElement, qrCodePath, '二维码')
-
-          if (saveResult.success) {
-            qrCodeSaved = true
-            qrCodeSaveMethod = saveResult.method || ''
-          } else {
-            throw new Error(saveResult.error || '保存失败')
-          }
-
-          await qrCodeElement.dispose()
-        } catch (qrError) {
-          console.error(
-            `⚠️ 保存二维码失败: ${qrError instanceof Error ? qrError.message : '未知错误'}`,
-          )
-          qrCodeSaved = false
+        if (downloadedPath) {
+          qrCodeSaved = true
+          console.log('✓ 二维码下载成功')
         }
+      } else {
+        throw new Error('API响应中未找到ctcode字段')
       }
 
       const executionTime = Date.now() - startTime

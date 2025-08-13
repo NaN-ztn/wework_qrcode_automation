@@ -36,6 +36,7 @@ interface ElectronAPI {
     callback: (qrCodePaths: { weworkQrPath: string; weibanQrPath: string }) => void,
   ) => void
   onConfigUpdate: (callback: (config: any) => void) => void
+  onButtonStateUpdate: (callback: (data: { status: 'completed' | 'failed' }) => void) => void
   getLogs: () => Promise<{ success: boolean; data?: string[] }>
   clearLogs: () => Promise<{ success: boolean; message?: string }>
   getTaskHistory: () => Promise<{ success: boolean; data?: any[]; message?: string }>
@@ -62,6 +63,9 @@ const electronAPI: ElectronAPI = {
   },
   onConfigUpdate: (callback) => {
     ipcRenderer.on('config-updated', (_, config) => callback(config))
+  },
+  onButtonStateUpdate: (callback) => {
+    ipcRenderer.on('button-state-update', (_, data) => callback(data))
   },
   getLogs: () => ipcRenderer.invoke('get-logs'),
   clearLogs: () => ipcRenderer.invoke('clear-logs'),

@@ -276,13 +276,24 @@ class ElectronApp {
           this.sendStepUpdate(5, 'running', '创建微伴+v活码')
           console.log('=== 步骤5: 创建微伴+v活码 ===')
           const config = ConfigManager.loadConfig()
-          const qrCodeDir = config.QRCODE_TARGET_STORE_PATH
+
+          // 确保企微群码已经生成
+          if (!qrCodePaths.weworkQrPath) {
+            this.sendStepUpdate(5, 'failed', '微伴活码创建失败: 企微群码尚未生成')
+            return {
+              success: false,
+              message: '微伴活码创建失败: 企微群码尚未生成',
+            }
+          }
+
+          // 获取企微群码所在的目录作为微伴二维码的保存目录
+          const weworkQrDir = path.dirname(qrCodePaths.weworkQrPath)
           const qrCodeFileName = `weiban_${storeData.storeName}_${Date.now()}.png`
-          const qrCodePath = path.join(qrCodeDir, qrCodeFileName)
+          const qrCodePath = path.join(weworkQrDir, qrCodeFileName)
 
           const weibanQrResult = await this.weibanManager.createWeibanLiveCode({
-            qrCodeDir,
-            qrCodePath,
+            qrCodeDir: weworkQrDir,
+            qrCodePath: qrCodePaths.weworkQrPath, // 传递企微群码路径作为上传文件
             storeName: storeData.storeName,
             storeType: storeData.storeType,
             assistant: storeData.assistant,
@@ -314,6 +325,13 @@ class ElectronApp {
           // 最终再次发送完整的二维码路径信息
           this.sendQrCodePaths(qrCodePaths)
 
+          // 任务完成后关闭浏览器并恢复按钮状态
+          console.log('=== 任务完成，关闭浏览器 ===')
+          await this.browserInstance.forceCloseBrowser()
+
+          // 通知渲染进程恢复按钮状态
+          this.sendButtonStateUpdate('completed')
+
           return {
             success: true,
             message: '所有任务执行完成',
@@ -330,6 +348,17 @@ class ElectronApp {
             'failed',
             `执行异常: ${error instanceof Error ? error.message : '未知错误'}`,
           )
+
+          // 任务失败时也要关闭浏览器并恢复按钮状态
+          console.log('=== 任务失败，关闭浏览器 ===')
+          try {
+            await this.browserInstance.forceCloseBrowser()
+          } catch (closeError) {
+            console.error('关闭浏览器失败:', closeError)
+          }
+
+          // 通知渲染进程恢复按钮状态
+          this.sendButtonStateUpdate('failed')
 
           return {
             success: false,
@@ -551,6 +580,13 @@ class ElectronApp {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       const newConfig = ConfigManager.loadConfig()
       this.mainWindow.webContents.send('config-updated', newConfig)
+    }
+  }
+
+  // 发送按钮状态更新事件到渲染进程
+  private sendButtonStateUpdate(status: 'completed' | 'failed'): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('button-state-update', { status })
     }
   }
 
