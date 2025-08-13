@@ -1,19 +1,22 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { ConfigManager, AppConfig } from './utils/config-manager'
 import { WeworkManager } from './automation/wework'
+import { WeibanManager } from './automation/weiban'
 import { BrowserInstance } from './automation/browser-instance'
 
 class ElectronApp {
   private mainWindow: BrowserWindow | null = null
   private weworkManager: WeworkManager
+  private weibanManager: WeibanManager
   private browserInstance: BrowserInstance
   private logs: string[] = []
 
   constructor() {
     this.browserInstance = BrowserInstance.getInstance()
     this.weworkManager = WeworkManager.getInstance()
+    this.weibanManager = WeibanManager.getInstance()
     this.setupLogging()
     this.initConfig()
     this.init()
@@ -159,6 +162,12 @@ class ElectronApp {
         }
 
         const success = await ConfigManager.saveConfig(config)
+
+        if (success) {
+          // 配置保存成功后，通知渲染进程更新
+          this.sendConfigUpdate()
+        }
+
         return {
           success,
           message: success ? '配置保存成功！' : '配置保存失败',
@@ -181,33 +190,154 @@ class ElectronApp {
     })
 
     // 执行任务
-    ipcMain.handle('execute-task', async () => {
-      try {
-        console.log('=== 主进程: 开始检查企微登录状态 ===')
-        const res = await this.weworkManager.checkWeWorkLogin()
-        console.log('=== 主进程: 登录检查完成，结果:', JSON.stringify(res, null, 2))
+    ipcMain.handle(
+      'execute-task',
+      async (
+        _,
+        storeData: {
+          storeName: string
+          mobile: string
+          storeType: string
+          assistant: string
+        },
+      ) => {
+        try {
+          const qrCodePaths = {
+            weworkQrPath: '',
+            weibanQrPath: '',
+          }
 
-        if (!res.success) return res
+          // 步骤1: 检查企微登录状态
+          this.sendStepUpdate(1, 'running', '检查企微登录状态')
+          console.log('=== 步骤1: 检查企微登录状态 ===')
+          const weworkLoginResult = await this.weworkManager.checkWeWorkLogin()
 
-        console.log('=== 主进程: 开始变更联系人信息 ===')
-        const changeResult = await this.weworkManager.changeContactInfo({
-          mobile: '13052828856',
-          storeName: '楠子22',
-          storeType: '店中店',
-        })
-        console.log('=== 主进程: 联系人信息变更完成，结果:', JSON.stringify(changeResult, null, 2))
+          if (!weworkLoginResult.success) {
+            this.sendStepUpdate(1, 'failed', `企微登录检查失败: ${weworkLoginResult.message}`)
+            return weworkLoginResult
+          }
 
-        return res
-      } catch (error) {
-        console.error('=== 主进程: 检查企微登录状态失败 ===')
-        console.error('错误详情:', error)
-        console.error('错误堆栈:', error instanceof Error ? error.stack : '无堆栈信息')
-        return {
-          success: false,
-          message: `检查登录状态失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          this.sendStepUpdate(1, 'completed', '企微登录检查成功')
+
+          // 步骤2: 检查微伴登录状态
+          this.sendStepUpdate(2, 'running', '检查微伴登录状态')
+          console.log('=== 步骤2: 检查微伴登录状态 ===')
+          const weibanLoginResult = await this.weibanManager.checkWeibanLogin()
+
+          if (!weibanLoginResult.success) {
+            this.sendStepUpdate(2, 'failed', `微伴登录检查失败: ${weibanLoginResult.message}`)
+            return weibanLoginResult
+          }
+
+          this.sendStepUpdate(2, 'completed', '微伴登录检查成功')
+
+          // 步骤3: 更改企微通讯录名称
+          this.sendStepUpdate(3, 'running', '更改企微通讯录名称')
+          console.log('=== 步骤3: 更改企微通讯录名称 ===')
+          const changeResult = await this.weworkManager.changeContactInfo({
+            mobile: storeData.mobile,
+            storeName: storeData.storeName,
+            storeType: storeData.storeType,
+          })
+
+          if (!changeResult.success) {
+            this.sendStepUpdate(3, 'failed', `通讯录名称更改失败: ${changeResult.message}`)
+            return changeResult
+          }
+
+          this.sendStepUpdate(3, 'completed', '通讯录名称更改成功')
+
+          // 步骤4: 创建企业微信群码
+          this.sendStepUpdate(4, 'running', '创建企业微信群码')
+          console.log('=== 步骤4: 创建企业微信群码 ===')
+          const weworkQrResult = await this.weworkManager.createGroupLiveCode({
+            storeName: storeData.storeName,
+            storeType: storeData.storeType,
+            assistant: storeData.assistant,
+          })
+
+          if (!weworkQrResult.success) {
+            this.sendStepUpdate(4, 'failed', `企微群码创建失败: ${weworkQrResult.message}`)
+            return weworkQrResult
+          }
+
+          if (weworkQrResult.data?.qrCodePath) {
+            qrCodePaths.weworkQrPath = weworkQrResult.data.qrCodePath
+            // 立即发送企微二维码路径到渲染进程
+            this.sendQrCodePaths({
+              weworkQrPath: qrCodePaths.weworkQrPath,
+              weibanQrPath: qrCodePaths.weibanQrPath,
+            })
+          }
+
+          this.sendStepUpdate(4, 'completed', '企微群码创建成功')
+
+          // 步骤5: 创建微伴+v活码
+          this.sendStepUpdate(5, 'running', '创建微伴+v活码')
+          console.log('=== 步骤5: 创建微伴+v活码 ===')
+          const config = ConfigManager.loadConfig()
+          const qrCodeDir = config.QRCODE_TARGET_STORE_PATH
+          const qrCodeFileName = `weiban_${storeData.storeName}_${Date.now()}.png`
+          const qrCodePath = path.join(qrCodeDir, qrCodeFileName)
+
+          const weibanQrResult = await this.weibanManager.createWeibanLiveCode({
+            qrCodeDir,
+            qrCodePath,
+            storeName: storeData.storeName,
+            storeType: storeData.storeType,
+            assistant: storeData.assistant,
+          })
+
+          if (!weibanQrResult.success) {
+            this.sendStepUpdate(5, 'failed', `微伴活码创建失败: ${weibanQrResult.message}`)
+            return weibanQrResult
+          }
+
+          if (weibanQrResult.data?.qrCodePath) {
+            qrCodePaths.weibanQrPath = weibanQrResult.data.qrCodePath
+            // 立即发送微伴二维码路径到渲染进程
+            this.sendQrCodePaths({
+              weworkQrPath: qrCodePaths.weworkQrPath,
+              weibanQrPath: qrCodePaths.weibanQrPath,
+            })
+          } else if (weibanQrResult.data?.weibanQrCodePath) {
+            // 处理微伴返回的二维码路径字段可能不同的情况
+            qrCodePaths.weibanQrPath = weibanQrResult.data.weibanQrCodePath
+            this.sendQrCodePaths({
+              weworkQrPath: qrCodePaths.weworkQrPath,
+              weibanQrPath: qrCodePaths.weibanQrPath,
+            })
+          }
+
+          this.sendStepUpdate(5, 'completed', '微伴活码创建成功')
+
+          // 最终再次发送完整的二维码路径信息
+          this.sendQrCodePaths(qrCodePaths)
+
+          return {
+            success: true,
+            message: '所有任务执行完成',
+            data: qrCodePaths,
+          }
+        } catch (error) {
+          console.error('=== 任务执行异常 ===')
+          console.error('错误详情:', error)
+          console.error('错误堆栈:', error instanceof Error ? error.stack : '无堆栈信息')
+
+          // 通知当前步骤失败
+          this.sendStepUpdate(
+            0,
+            'failed',
+            `执行异常: ${error instanceof Error ? error.message : '未知错误'}`,
+          )
+
+          return {
+            success: false,
+            message: `任务执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          }
         }
-      }
-    })
+      },
+    )
 
     // 获取自动化管理器状态
     ipcMain.handle('get-automation-status', async () => {
@@ -263,6 +393,165 @@ class ElectronApp {
         message: '日志已清空',
       }
     })
+
+    // 打开二维码文件夹
+    ipcMain.handle('open-qrcode-folder', async (_, filePath: string) => {
+      try {
+        if (fs.existsSync(filePath)) {
+          const stats = fs.statSync(filePath)
+
+          if (stats.isDirectory()) {
+            // 如果是目录，直接打开目录
+            await shell.openPath(filePath)
+          } else {
+            // 如果是文件，显示文件在文件夹中的位置
+            shell.showItemInFolder(filePath)
+          }
+
+          return { success: true, message: '已打开文件夹' }
+        } else {
+          return { success: false, message: '路径不存在' }
+        }
+      } catch (error) {
+        return { success: false, message: `打开文件夹失败: ${error}` }
+      }
+    })
+
+    // 获取任务历史记录
+    ipcMain.handle('get-task-history', async () => {
+      try {
+        const config = ConfigManager.loadConfig()
+        const qrCodeBasePath = config.QRCODE_TARGET_STORE_PATH
+
+        if (!fs.existsSync(qrCodeBasePath)) {
+          return {
+            success: true,
+            data: [],
+            message: '二维码存储目录不存在',
+          }
+        }
+
+        // 读取所有子目录
+        const entries = fs.readdirSync(qrCodeBasePath, { withFileTypes: true })
+        const directories = entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => {
+            const fullPath = path.join(qrCodeBasePath, entry.name)
+            const stats = fs.statSync(fullPath)
+            return {
+              name: entry.name,
+              fullPath,
+              mtime: stats.mtime,
+            }
+          })
+
+        // 按修改时间降序排序，取最近10条
+        const sortedDirectories = directories
+          .sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+          .slice(0, 10)
+
+        // 处理每个目录，提取任务信息和二维码
+        const taskHistory = sortedDirectories.map((dir) => {
+          // 解析目录名获取门店名称和时间戳
+          const dirName = dir.name
+          const parts = dirName.split('_')
+          let storeName = dirName
+          let timestamp = dir.mtime.getTime()
+
+          // 尝试从目录名解析门店名称和时间戳
+          if (parts.length >= 2) {
+            // 假设格式为: storeName_timestamp 或 storeName_year_month_day_hour_minute_second
+            if (parts.length >= 6) {
+              // 格式: storeName_year_month_day_hour_minute_second
+              storeName = parts[0]
+              const year = parseInt(parts[1])
+              const month = parseInt(parts[2]) - 1 // JavaScript月份从0开始
+              const day = parseInt(parts[3])
+              const hour = parseInt(parts[4])
+              const minute = parseInt(parts[5])
+              const second = parseInt(parts[6]) || 0
+
+              if (!isNaN(year) && year > 2020) {
+                timestamp = new Date(year, month, day, hour, minute, second).getTime()
+              }
+            } else if (parts.length === 2 && /^\d+$/.test(parts[1])) {
+              // 格式: storeName_timestamp
+              storeName = parts[0]
+              const parsedTimestamp = parseInt(parts[1])
+              if (!isNaN(parsedTimestamp) && parsedTimestamp > 1000000000000) {
+                timestamp = parsedTimestamp
+              }
+            }
+          }
+
+          // 检查二维码文件
+          const qrCodes: { wework?: string; weiban?: string } = {}
+
+          const weworkQrPath = path.join(dir.fullPath, 'groupqrcode.png')
+          if (fs.existsSync(weworkQrPath)) {
+            qrCodes.wework = weworkQrPath
+          }
+
+          const weibanQrPath = path.join(dir.fullPath, 'weiban_qr_code.png')
+          if (fs.existsSync(weibanQrPath)) {
+            qrCodes.weiban = weibanQrPath
+          }
+
+          return {
+            id: dirName,
+            storeName,
+            timestamp,
+            createTime: new Date(timestamp).toLocaleString('zh-CN'),
+            folderPath: dir.fullPath,
+            qrCodes,
+          }
+        })
+
+        return {
+          success: true,
+          data: taskHistory,
+          message: `找到 ${taskHistory.length} 条历史记录`,
+        }
+      } catch (error) {
+        console.error('获取任务历史记录失败:', error)
+        return {
+          success: false,
+          message: `获取任务历史记录失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          data: [],
+        }
+      }
+    })
+  }
+
+  // 发送步骤更新事件到渲染进程
+  private sendStepUpdate(
+    step: number,
+    status: 'pending' | 'running' | 'completed' | 'failed',
+    message: string,
+  ): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('task-step-update', {
+        step,
+        status,
+        message,
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  // 发送二维码路径到渲染进程
+  private sendQrCodePaths(qrCodePaths: { weworkQrPath: string; weibanQrPath: string }): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('qrcode-paths-update', qrCodePaths)
+    }
+  }
+
+  // 发送配置更新事件到渲染进程
+  private sendConfigUpdate(): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      const newConfig = ConfigManager.loadConfig()
+      this.mainWindow.webContents.send('config-updated', newConfig)
+    }
   }
 
   private async cleanup(): Promise<void> {

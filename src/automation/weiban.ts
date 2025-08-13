@@ -508,6 +508,8 @@ export class WeibanManager extends BaseManager {
           storeType: parm.storeType,
           assistant: parm.assistant,
           timestamp: Date.now(),
+          // 标准二维码路径字段（供主进程使用）
+          qrCodePath: weibanQrCodePath,
           // 微伴活码信息
           weibanContactWay: contactWayInfo,
           weibanQrCodePath,
@@ -590,15 +592,15 @@ export class WeibanManager extends BaseManager {
   }
 }
 
-;(async function () {
-  const instance = WeibanManager.getInstance()
-  await instance.checkWeibanLogin()
-  await instance.createWeibanLiveCode({
-    storeName: '楠子1店',
-    storeType: '独立店',
-    assistant: '王莹',
-    qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
-    qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
-  })
-  // await instance.forceCloseBrowser()
-})()
+// ;(async function () {
+//   const instance = WeibanManager.getInstance()
+//   await instance.checkWeibanLogin()
+//   await instance.createWeibanLiveCode({
+//     storeName: '楠子1店',
+//     storeType: '独立店',
+//     assistant: '王莹',
+//     qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
+//     qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
+//   })
+//   // await instance.forceCloseBrowser()
+// })()

@@ -685,6 +685,10 @@ export class WeworkManager extends BaseManager {
 
       // 步骤9: 点击使用模板
       console.log('\n=== 步骤9: 点击使用模板 ===')
+      await this.waitForSelectorDisappear(
+        page,
+        '#__dialog__MNDialog__ > div > div.qui_dialog_foot.ww_dialog_foot > a.qui_btn.ww_btn.ww_btn_Blue',
+      )
       await this.waitAndClick(
         page,
         '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(3) > div.csPlugin_mod_item_content > div.csPlugin_mod_item_row.js_csPlugin_mod_item_set.csPlugin_mod_item_set > a',
@@ -905,10 +909,10 @@ export class WeworkManager extends BaseManager {
 // ;(async function () {
 //   const instance = WeworkManager.getInstance()
 //   await instance.checkWeWorkLogin()
-//   await instance.createGroupLiveCode({
-//     storeName: '楠子1店',
-//     storeType: '店中店',
-//     assistant: '楠子1店',
-//   })
-//   await instance.forceCloseBrowser()
+//   // await instance.createGroupLiveCode({
+//   //   storeName: '楠子1店',
+//   //   storeType: '店中店',
+//   //   assistant: '楠子1店',
+//   // })
+//   // await instance.forceCloseBrowser()
 // })()

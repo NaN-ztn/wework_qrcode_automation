@@ -17,8 +17,10 @@ class RendererApp {
 
   // 标签页元素
   private mainTab!: HTMLButtonElement
+  private historyTab!: HTMLButtonElement
   private configTab!: HTMLButtonElement
   private mainPanel!: HTMLDivElement
+  private historyPanel!: HTMLDivElement
   private configPanel!: HTMLDivElement
 
   // 配置表单元素
@@ -39,6 +41,36 @@ class RendererApp {
   // 日志控制元素
   private clearLogsBtn!: HTMLButtonElement
   private autoScrollBtn!: HTMLButtonElement
+
+  // 步骤管理元素
+  private stepItems!: NodeListOf<HTMLDivElement>
+
+  // 二维码相关元素
+  private weworkQrImage!: HTMLImageElement
+  private weibanQrImage!: HTMLImageElement
+  private openWeworkFolderBtn!: HTMLButtonElement
+  private openWeibanFolderBtn!: HTMLButtonElement
+
+  // 历史任务相关元素
+  private refreshHistoryBtn!: HTMLButtonElement
+  private historyLoading!: HTMLDivElement
+  private historyList!: HTMLDivElement
+  private noHistoryMessage!: HTMLDivElement
+
+  // 步骤状态管理
+  private steps = [
+    { id: 1, title: '检查企微登录状态', status: 'pending', message: '等待执行...' },
+    { id: 2, title: '检查微伴登录状态', status: 'pending', message: '等待执行...' },
+    { id: 3, title: '更改企微通讯录名称', status: 'pending', message: '等待执行...' },
+    { id: 4, title: '创建企业微信群码', status: 'pending', message: '等待执行...' },
+    { id: 5, title: '创建微伴+v活码', status: 'pending', message: '等待执行...' },
+  ]
+
+  // 二维码路径存储
+  private qrCodePaths = {
+    weworkQrPath: '',
+    weibanQrPath: '',
+  }
 
   private isRunning = false
   private autoScroll = true
@@ -71,8 +103,10 @@ class RendererApp {
 
     // 标签页元素
     this.mainTab = document.getElementById('mainTab') as HTMLButtonElement
+    this.historyTab = document.getElementById('historyTab') as HTMLButtonElement
     this.configTab = document.getElementById('configTab') as HTMLButtonElement
     this.mainPanel = document.getElementById('mainPanel') as HTMLDivElement
+    this.historyPanel = document.getElementById('historyPanel') as HTMLDivElement
     this.configPanel = document.getElementById('configPanel') as HTMLDivElement
 
     // 配置表单元素
@@ -90,6 +124,21 @@ class RendererApp {
     // 日志控制元素
     this.clearLogsBtn = document.getElementById('clearLogsBtn') as HTMLButtonElement
     this.autoScrollBtn = document.getElementById('autoScrollBtn') as HTMLButtonElement
+
+    // 步骤管理元素
+    this.stepItems = document.querySelectorAll('.step-item') as NodeListOf<HTMLDivElement>
+
+    // 二维码相关元素
+    this.weworkQrImage = document.getElementById('weworkQrImage') as HTMLImageElement
+    this.weibanQrImage = document.getElementById('weibanQrImage') as HTMLImageElement
+    this.openWeworkFolderBtn = document.getElementById('openWeworkFolder') as HTMLButtonElement
+    this.openWeibanFolderBtn = document.getElementById('openWeibanFolder') as HTMLButtonElement
+
+    // 历史任务相关元素
+    this.refreshHistoryBtn = document.getElementById('refreshHistoryBtn') as HTMLButtonElement
+    this.historyLoading = document.getElementById('historyLoading') as HTMLDivElement
+    this.historyList = document.getElementById('historyList') as HTMLDivElement
+    this.noHistoryMessage = document.getElementById('noHistoryMessage') as HTMLDivElement
   }
 
   private setupEventListeners(): void {
@@ -98,6 +147,7 @@ class RendererApp {
 
     // 标签页切换
     this.mainTab.addEventListener('click', () => this.switchTab('main'))
+    this.historyTab.addEventListener('click', () => this.switchTab('history'))
     this.configTab.addEventListener('click', () => this.switchTab('config'))
 
     // 配置管理
@@ -117,22 +167,42 @@ class RendererApp {
     this.clearLogsBtn.addEventListener('click', () => this.clearLogs())
     this.autoScrollBtn.addEventListener('click', () => this.toggleAutoScroll())
 
-    // 监听主进程日志
+    // 历史任务控制
+    this.refreshHistoryBtn.addEventListener('click', () => this.loadTaskHistory())
+
+    // 二维码文件夹打开
+    this.openWeworkFolderBtn.addEventListener('click', () =>
+      this.openQrCodeFolder(this.qrCodePaths.weworkQrPath),
+    )
+    this.openWeibanFolderBtn.addEventListener('click', () =>
+      this.openQrCodeFolder(this.qrCodePaths.weibanQrPath),
+    )
+
+    // 监听主进程日志和步骤更新
     this.setupMainProcessLogListener()
+    this.setupStepUpdateListener()
+    this.setupQrCodeUpdateListener()
+    this.setupConfigUpdateListener()
   }
 
-  private switchTab(tab: 'main' | 'config'): void {
+  private switchTab(tab: 'main' | 'history' | 'config'): void {
     // 清除所有active状态
     this.mainTab.classList.remove('active')
+    this.historyTab.classList.remove('active')
     this.configTab.classList.remove('active')
     this.mainPanel.classList.remove('active')
+    this.historyPanel.classList.remove('active')
     this.configPanel.classList.remove('active')
 
     // 设置新的active状态
     if (tab === 'main') {
       this.mainTab.classList.add('active')
       this.mainPanel.classList.add('active')
-    } else {
+    } else if (tab === 'history') {
+      this.historyTab.classList.add('active')
+      this.historyPanel.classList.add('active')
+      this.loadTaskHistory() // 切换到历史页面时加载历史记录
+    } else if (tab === 'config') {
       this.configTab.classList.add('active')
       this.configPanel.classList.add('active')
       this.loadConfig() // 切换到配置页面时重新加载配置
@@ -359,6 +429,11 @@ class RendererApp {
 
         // 显示保存成功的提示
         this.showConfigSaveSuccess()
+
+        // 保存成功后自动切换回主页
+        setTimeout(() => {
+          this.switchTab('main')
+        }, 1000)
       } else {
         this.addLog(result.message, 'error')
       }
@@ -448,6 +523,10 @@ class RendererApp {
         return
       }
 
+      // 重置步骤状态
+      this.resetSteps()
+      this.clearQrCodes()
+
       this.isRunning = true
       this.executeBtn.disabled = true
       this.stopBtn.disabled = false
@@ -458,7 +537,7 @@ class RendererApp {
       this.addLog(`📞 联系方式: ${storeData.mobile}`, 'info')
       this.addLog(`👤 执行助理: ${storeData.assistant}`, 'info')
 
-      const result = await window.electronAPI.executeTask()
+      const result = await window.electronAPI.executeTask(storeData)
 
       // 处理执行结果
       if (result.success) {
@@ -523,6 +602,152 @@ class RendererApp {
     if (!assistant) {
       this.addLog('👤 请选择执行助理', 'error')
     }
+  }
+
+  // 步骤管理方法
+  private resetSteps(): void {
+    this.steps.forEach((step, index) => {
+      step.status = 'pending'
+      step.message = '等待执行...'
+      this.updateStepUI(index + 1, step.status, step.message)
+    })
+  }
+
+  private updateStepUI(stepNumber: number, status: string, message: string): void {
+    const stepItem = document.querySelector(`[data-step="${stepNumber}"]`) as HTMLDivElement
+    if (!stepItem) return
+
+    const stepStatusElement = stepItem.querySelector('.step-status') as HTMLSpanElement
+    const stepMessageElement = stepItem.querySelector('.step-message') as HTMLDivElement
+
+    // 更新状态图标
+    const statusIcons = {
+      pending: '⏳',
+      running: '🔄',
+      completed: '✅',
+      failed: '❌',
+    }
+    stepStatusElement.textContent = statusIcons[status as keyof typeof statusIcons] || '⏳'
+    stepStatusElement.className = `step-status ${status}`
+
+    // 更新消息
+    stepMessageElement.textContent = message
+
+    // 更新步骤项样式
+    stepItem.className = `step-item ${status}`
+  }
+
+  // 二维码管理方法
+  private clearQrCodes(): void {
+    this.qrCodePaths.weworkQrPath = ''
+    this.qrCodePaths.weibanQrPath = ''
+
+    // 隐藏图片并显示占位符
+    this.weworkQrImage.style.display = 'none'
+    this.weibanQrImage.style.display = 'none'
+    this.openWeworkFolderBtn.style.display = 'none'
+    this.openWeibanFolderBtn.style.display = 'none'
+
+    const placeholders = document.querySelectorAll('.qrcode-placeholder')
+    placeholders.forEach((placeholder) => {
+      ;(placeholder as HTMLElement).style.display = 'block'
+    })
+  }
+
+  private displayQrCode(type: 'wework' | 'weiban', imagePath: string): void {
+    const imageElement = type === 'wework' ? this.weworkQrImage : this.weibanQrImage
+    const folderBtn = type === 'wework' ? this.openWeworkFolderBtn : this.openWeibanFolderBtn
+    const placeholder = document.querySelector(`#${type}QrCode .qrcode-placeholder`) as HTMLElement
+
+    if (imagePath && imagePath.trim()) {
+      // 设置图片路径（使用file://协议）
+      imageElement.src = `file://${imagePath}`
+      imageElement.style.display = 'block'
+      folderBtn.style.display = 'block'
+      placeholder.style.display = 'none'
+
+      // 更新路径存储
+      if (type === 'wework') {
+        this.qrCodePaths.weworkQrPath = imagePath
+      } else {
+        this.qrCodePaths.weibanQrPath = imagePath
+      }
+    }
+  }
+
+  private async openQrCodeFolder(filePath: string): Promise<void> {
+    if (!filePath) {
+      this.addLog('❌ 二维码文件路径为空', 'error')
+      return
+    }
+
+    try {
+      const result = await window.electronAPI.openQrCodeFolder(filePath)
+      if (result.success) {
+        this.addLog('📁 已打开文件夹', 'info')
+      } else {
+        this.addLog(`❌ 打开文件夹失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addLog(`❌ 打开文件夹异常: ${error}`, 'error')
+    }
+  }
+
+  // 事件监听器
+  private setupStepUpdateListener(): void {
+    window.electronAPI.onStepUpdate(
+      (stepData: { step: number; status: string; message: string; timestamp: number }) => {
+        // 更新内部状态
+        const stepIndex = stepData.step - 1
+        if (stepIndex >= 0 && stepIndex < this.steps.length) {
+          this.steps[stepIndex].status = stepData.status
+          this.steps[stepIndex].message = stepData.message
+        }
+
+        // 更新UI
+        this.updateStepUI(stepData.step, stepData.status, stepData.message)
+
+        // 记录日志
+        const logMessage = `步骤${stepData.step}: ${stepData.message}`
+        const logType =
+          stepData.status === 'failed'
+            ? 'error'
+            : stepData.status === 'completed'
+              ? 'success'
+              : 'info'
+        this.addLog(logMessage, logType)
+      },
+    )
+  }
+
+  private setupQrCodeUpdateListener(): void {
+    window.electronAPI.onQrCodeUpdate(
+      (qrCodePaths: { weworkQrPath: string; weibanQrPath: string }) => {
+        // 显示二维码
+        if (qrCodePaths.weworkQrPath) {
+          this.displayQrCode('wework', qrCodePaths.weworkQrPath)
+          this.addLog(`📷 企业微信群码已生成: ${qrCodePaths.weworkQrPath}`, 'success')
+        }
+
+        if (qrCodePaths.weibanQrPath) {
+          this.displayQrCode('weiban', qrCodePaths.weibanQrPath)
+          this.addLog(`📷 微伴活码已生成: ${qrCodePaths.weibanQrPath}`, 'success')
+        }
+      },
+    )
+  }
+
+  private setupConfigUpdateListener(): void {
+    window.electronAPI.onConfigUpdate((config: any) => {
+      // 更新当前配置
+      this.currentConfig = config
+      this.addLog('📝 配置已更新，正在刷新门店信息选项...', 'info')
+
+      // 重新初始化门店表单（更新下拉选项）
+      this.initializeStoreForm()
+
+      this.addLog('✅ 门店信息选项已更新', 'success')
+    })
   }
 
   private async stopExecution(): Promise<void> {
@@ -640,6 +865,153 @@ class RendererApp {
     this.logsDiv.appendChild(logEntry)
     if (this.autoScroll) {
       this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    }
+  }
+
+  // 历史任务相关方法
+  private async loadTaskHistory(): Promise<void> {
+    try {
+      // 显示加载状态
+      this.showHistoryLoading(true)
+
+      const result = await window.electronAPI.getTaskHistory()
+
+      if (result.success && result.data) {
+        this.displayTaskHistory(result.data)
+        this.addLog(`📋 已加载 ${result.data.length} 条历史记录`, 'info')
+      } else {
+        this.showNoHistoryMessage()
+        this.addLog(`❌ 加载历史记录失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.showNoHistoryMessage()
+      this.addLog(`❌ 加载历史记录异常: ${error}`, 'error')
+    } finally {
+      this.showHistoryLoading(false)
+    }
+  }
+
+  private showHistoryLoading(show: boolean): void {
+    this.historyLoading.style.display = show ? 'flex' : 'none'
+    this.historyList.style.display = show ? 'none' : 'block'
+    this.noHistoryMessage.style.display = 'none'
+  }
+
+  private showNoHistoryMessage(): void {
+    this.historyLoading.style.display = 'none'
+    this.historyList.style.display = 'none'
+    this.noHistoryMessage.style.display = 'flex'
+    this.historyList.innerHTML = ''
+  }
+
+  private displayTaskHistory(tasks: any[]): void {
+    this.historyLoading.style.display = 'none'
+    this.noHistoryMessage.style.display = 'none'
+    this.historyList.style.display = 'block'
+
+    if (tasks.length === 0) {
+      this.showNoHistoryMessage()
+      return
+    }
+
+    // 清空现有内容
+    this.historyList.innerHTML = ''
+
+    // 生成任务记录
+    tasks.forEach((task) => {
+      const taskCard = this.createTaskCard(task)
+      this.historyList.appendChild(taskCard)
+    })
+  }
+
+  private createTaskCard(task: any): HTMLElement {
+    const card = document.createElement('div')
+    card.className = 'task-record-card'
+
+    // 检查是否有QR码
+    const hasWeworkQr = task.qrCodes.wework && task.qrCodes.wework.trim()
+    const hasWeibanQr = task.qrCodes.weiban && task.qrCodes.weiban.trim()
+
+    // 构建HTML结构
+    card.innerHTML = `
+      <div class="task-record-header">
+        <div class="task-info">
+          <h4 class="task-store-name">${task.storeName}</h4>
+          <div class="task-time">${task.createTime}</div>
+          <div class="task-id">任务ID: ${task.id}</div>
+        </div>
+        <div class="task-actions">
+          <button class="btn btn-small btn-secondary open-folder-btn" 
+                  data-folder-path="${task.folderPath}" 
+                  title="打开文件夹">
+            📁 打开文件夹
+          </button>
+        </div>
+      </div>
+      
+      <div class="task-qrcodes">
+        ${this.buildQrCodeSection(hasWeworkQr, hasWeibanQr, task.qrCodes)}
+      </div>
+    `
+
+    // 添加事件监听器
+    const openFolderBtn = card.querySelector('.open-folder-btn') as HTMLButtonElement
+    if (openFolderBtn) {
+      openFolderBtn.addEventListener('click', () => {
+        this.openTaskFolder(task.folderPath)
+      })
+    }
+
+    return card
+  }
+
+  private buildQrCodeSection(hasWeworkQr: boolean, hasWeibanQr: boolean, qrCodes: any): string {
+    if (!hasWeworkQr && !hasWeibanQr) {
+      return `
+        <div class="no-qrcodes">
+          <div class="no-qr-icon">🚫</div>
+          <span>此任务未找到二维码文件</span>
+        </div>
+      `
+    }
+
+    return `
+      <div class="qrcode-grid">
+        ${hasWeworkQr ? this.buildQrCodeItem('企业微信群码', '📱', qrCodes.wework) : ''}
+        ${hasWeibanQr ? this.buildQrCodeItem('微伴活码', '🔗', qrCodes.weiban) : ''}
+      </div>
+    `
+  }
+
+  private buildQrCodeItem(label: string, icon: string, imagePath: string): string {
+    // 处理文件路径，确保正确的格式
+    const safePath = imagePath.replace(/\\/g, '/').replace(/'/g, "\\'")
+
+    return `
+      <div class="qr-preview-item">
+        <div class="qr-preview-header">
+          <span class="qr-label">${icon} ${label}</span>
+        </div>
+        <div class="qr-preview-image">
+          <img src="file://${safePath}" 
+               alt="${label}" 
+               onerror="this.parentElement.innerHTML='<div class=&quot;qr-error&quot;>⚠️ 图片加载失败</div>'"
+               onload="this.style.opacity='1'">
+        </div>
+      </div>
+    `
+  }
+
+  private async openTaskFolder(folderPath: string): Promise<void> {
+    try {
+      const result = await window.electronAPI.openQrCodeFolder(folderPath)
+      if (result.success) {
+        this.addLog('📁 已打开任务文件夹', 'info')
+      } else {
+        this.addLog(`❌ 打开任务文件夹失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addLog(`❌ 打开任务文件夹异常: ${error}`, 'error')
     }
   }
 }

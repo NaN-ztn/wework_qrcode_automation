@@ -12,6 +12,7 @@
             <h1>企业微信二维码自动化工具</h1>
             <nav class="nav-tabs">
                 <button id="mainTab" class="tab-btn active">主页</button>
+                <button id="historyTab" class="tab-btn">历史任务</button>
                 <button id="configTab" class="tab-btn">环境配置</button>
             </nav>
         </header>
@@ -72,6 +73,104 @@
                     </form>
                 </div>
                 
+                <!-- 任务执行面板 -->
+                <div class="task-panel">
+                    <div class="task-content">
+                        <!-- 左侧：步骤清单 -->
+                        <div class="steps-section">
+                            <h3>执行步骤</h3>
+                            <div class="steps-list">
+                                <div class="step-item" data-step="1">
+                                    <div class="step-icon">
+                                        <span class="step-number">1</span>
+                                        <span class="step-status pending">⏳</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">检查企微登录状态</div>
+                                        <div class="step-message">等待执行...</div>
+                                    </div>
+                                </div>
+                                <div class="step-item" data-step="2">
+                                    <div class="step-icon">
+                                        <span class="step-number">2</span>
+                                        <span class="step-status pending">⏳</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">检查微伴登录状态</div>
+                                        <div class="step-message">等待执行...</div>
+                                    </div>
+                                </div>
+                                <div class="step-item" data-step="3">
+                                    <div class="step-icon">
+                                        <span class="step-number">3</span>
+                                        <span class="step-status pending">⏳</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">更改企微通讯录名称</div>
+                                        <div class="step-message">等待执行...</div>
+                                    </div>
+                                </div>
+                                <div class="step-item" data-step="4">
+                                    <div class="step-icon">
+                                        <span class="step-number">4</span>
+                                        <span class="step-status pending">⏳</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">创建企业微信群码</div>
+                                        <div class="step-message">等待执行...</div>
+                                    </div>
+                                </div>
+                                <div class="step-item" data-step="5">
+                                    <div class="step-icon">
+                                        <span class="step-number">5</span>
+                                        <span class="step-status pending">⏳</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">创建微伴+v活码</div>
+                                        <div class="step-message">等待执行...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 右侧：二维码展示 -->
+                        <div class="qrcode-section">
+                            <h3>生成的二维码</h3>
+                            <div class="qrcode-grid">
+                                <div class="qrcode-item" id="weworkQrCode">
+                                    <div class="qrcode-header">
+                                        <h4>企业微信群码</h4>
+                                        <button class="btn-folder" id="openWeworkFolder" style="display: none;" title="打开文件夹">
+                                            📁
+                                        </button>
+                                    </div>
+                                    <div class="qrcode-preview">
+                                        <div class="qrcode-placeholder">
+                                            <span>二维码将在生成后显示</span>
+                                        </div>
+                                        <img id="weworkQrImage" style="display: none;" alt="企业微信群码">
+                                    </div>
+                                </div>
+                                
+                                <div class="qrcode-item" id="weibanQrCode">
+                                    <div class="qrcode-header">
+                                        <h4>微伴活码</h4>
+                                        <button class="btn-folder" id="openWeibanFolder" style="display: none;" title="打开文件夹">
+                                            📁
+                                        </button>
+                                    </div>
+                                    <div class="qrcode-preview">
+                                        <div class="qrcode-placeholder">
+                                            <span>二维码将在生成后显示</span>
+                                        </div>
+                                        <img id="weibanQrImage" style="display: none;" alt="微伴活码">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="log-panel">
                     <div class="log-header">
                         <h3>操作日志</h3>
@@ -81,6 +180,33 @@
                         </div>
                     </div>
                     <div id="logs" class="log-container"></div>
+                </div>
+            </div>
+
+            <!-- 历史任务页面 -->
+            <div id="historyPanel" class="tab-content">
+                <div class="history-header">
+                    <h2>历史任务记录</h2>
+                    <div class="history-actions">
+                        <button id="refreshHistoryBtn" class="btn btn-secondary">刷新</button>
+                    </div>
+                </div>
+                
+                <div class="history-content">
+                    <div id="historyLoading" class="loading-spinner" style="display: none;">
+                        <div class="spinner"></div>
+                        <span>加载历史记录中...</span>
+                    </div>
+                    
+                    <div id="historyList" class="history-list">
+                        <!-- 历史任务记录将在这里动态生成 -->
+                    </div>
+                    
+                    <div id="noHistoryMessage" class="no-history" style="display: none;">
+                        <div class="no-history-icon">📭</div>
+                        <h3>暂无历史任务记录</h3>
+                        <p>完成第一个任务后，历史记录将在这里显示</p>
+                    </div>
                 </div>
             </div>
 
