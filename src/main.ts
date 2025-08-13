@@ -180,8 +180,8 @@ class ElectronApp {
       }
     })
 
-    // 企微登录状态检查
-    ipcMain.handle('check-wework-login', async () => {
+    // 执行任务
+    ipcMain.handle('execute-task', async () => {
       try {
         console.log('=== 主进程: 开始检查企微登录状态 ===')
         const res = await this.weworkManager.checkWeWorkLogin()

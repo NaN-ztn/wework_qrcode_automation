@@ -11,7 +11,7 @@ interface ElectronAPI {
   getConfig: () => Promise<{ success: boolean; config?: any; message?: string }>
   saveConfig: (config: any) => Promise<{ success: boolean; message: string }>
   resetConfig: () => Promise<{ success: boolean; message: string }>
-  checkWeWorkLogin: () => Promise<{ success: boolean; message: string; data?: any }>
+  executeTask: () => Promise<{ success: boolean; message: string; data?: any }>
   getAutomationStatus: () => Promise<{ success: boolean; data?: any }>
   getBrowserRunning: () => Promise<{ success: boolean; data?: any }>
   stopExecution: () => Promise<{ success: boolean; message: string }>
@@ -27,7 +27,7 @@ const electronAPI: ElectronAPI = {
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
   resetConfig: () => ipcRenderer.invoke('reset-config'),
-  checkWeWorkLogin: () => ipcRenderer.invoke('check-wework-login'),
+  executeTask: () => ipcRenderer.invoke('execute-task'),
   getAutomationStatus: () => ipcRenderer.invoke('get-automation-status'),
   getBrowserRunning: () => ipcRenderer.invoke('get-browser-running'),
   stopExecution: () => ipcRenderer.invoke('stop-execution'),

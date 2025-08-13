@@ -507,6 +507,153 @@ main {
     background: #218838;
 }
 
+/* 门店信息表单样式 */
+.store-form-panel {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+.store-form-panel h3 {
+    color: #2c3e50;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 1.2rem;
+}
+
+.store-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.form-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.store-form .form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.store-form .form-group label {
+    margin-bottom: 8px;
+    color: #495057;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.store-form .form-group input,
+.store-form .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    background: white;
+}
+
+.store-form .form-group input:focus,
+.store-form .form-group select:focus {
+    border-color: #3498db;
+    outline: 0;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.25);
+}
+
+.store-form .form-group input:invalid {
+    border-color: #e74c3c;
+}
+
+.store-form .form-group input:invalid:focus {
+    border-color: #e74c3c;
+    box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.25);
+}
+
+.store-form .form-group .form-text {
+    margin-top: 5px;
+    color: #6c757d;
+    font-size: 12px;
+}
+
+.store-form .form-group select {
+    cursor: pointer;
+}
+
+.store-form .form-group select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+
+/* 表单操作按钮区域 */
+.form-actions {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    align-items: center;
+}
+
+.form-actions .btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    min-width: 140px;
+    justify-content: center;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.form-actions .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.form-actions .btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.form-actions .btn:not(:disabled):active {
+    transform: translateY(0);
+}
+
+.btn-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.btn-text {
+    font-size: 16px;
+}
+
+/* 执行按钮特殊样式 */
+.form-actions .btn-primary {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    border: none;
+}
+
+.form-actions .btn-primary:not(:disabled):hover {
+    background: linear-gradient(135deg, #2980b9, #1f5582);
+}
+
 /* 日志相关样式 */
 .log-header {
     display: flex;

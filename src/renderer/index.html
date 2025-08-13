@@ -19,12 +19,6 @@
         <main>
             <!-- 主功能页面 -->
             <div id="mainPanel" class="tab-content active">
-                <div class="control-panel">
-                    <button id="installBtn" class="btn btn-install" style="display: none;">安装Chromium</button>
-                    <button id="checkLoginBtn" class="btn btn-info">检查企微登录</button>
-                    <button id="stopBtn" class="btn btn-danger" disabled>停止执行</button>
-                </div>
-                
                 <div id="progressPanel" class="progress-panel" style="display: none;">
                     <h3>安装进度</h3>
                     <div class="progress-bar">
@@ -33,28 +27,49 @@
                     <div id="progressText" class="progress-text">0%</div>
                 </div>
                 
-                <div class="status-panel">
-                    <h3>状态信息</h3>
-                    <div id="status" class="status-text">就绪</div>
-                </div>
-                
-                <div class="login-status-panel">
-                    <h3>企微登录状态</h3>
-                    <div id="loginStatus" class="login-status">未检查</div>
-                    <div id="loginDetails" class="login-details" style="display: none;">
-                        <div class="detail-item">
-                            <label>当前页面:</label>
-                            <span id="currentUrl">-</span>
+                <!-- 门店信息表单 -->
+                <div class="store-form-panel">
+                    <h3>门店信息</h3>
+                    <form id="storeForm" class="store-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="storeName">门店名称 *</label>
+                                <input type="text" id="storeName" name="storeName" required placeholder="请输入门店名称">
+                            </div>
+                            <div class="form-group">
+                                <label for="mobile">手机号 *</label>
+                                <input type="tel" id="mobile" name="mobile" pattern="[0-9]{11}" required placeholder="请输入11位手机号码">
+                                <small class="form-text">请输入11位手机号码</small>
+                            </div>
                         </div>
-                        <div class="detail-item">
-                            <label>页面标题:</label>
-                            <span id="pageTitle">-</span>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="storeType">门店类型 *</label>
+                                <select id="storeType" name="storeType" required>
+                                    <option value="">请选择门店类型</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="assistant">小助理 *</label>
+                                <select id="assistant" name="assistant" required>
+                                    <option value="">请选择小助理</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="detail-item">
-                            <label>检查时间:</label>
-                            <span id="checkTime">-</span>
+                        
+                        <!-- 操作按钮区域 -->
+                        <div class="form-actions">
+                            <button type="button" id="executeBtn" class="btn btn-primary" disabled>
+                                <span class="btn-icon">▶</span>
+                                <span class="btn-text">执行任务</span>
+                            </button>
+                            <button type="button" id="stopBtn" class="btn btn-danger" disabled>
+                                <span class="btn-icon">⏹</span>
+                                <span class="btn-text">停止执行</span>
+                            </button>
+                            <button id="installBtn" class="btn btn-install" style="display: none;">安装Chromium</button>
                         </div>
-                    </div>
+                    </form>
                 </div>
                 
                 <div class="log-panel">

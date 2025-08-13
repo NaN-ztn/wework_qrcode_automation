@@ -1,6 +1,6 @@
 class RendererApp {
   private installBtn!: HTMLButtonElement
-  private checkLoginBtn!: HTMLButtonElement
+  private executeBtn!: HTMLButtonElement
   private stopBtn!: HTMLButtonElement
   private statusDiv!: HTMLDivElement
   private logsDiv!: HTMLDivElement
@@ -8,12 +8,12 @@ class RendererApp {
   private progressBar!: HTMLDivElement
   private progressText!: HTMLDivElement
 
-  // 登录状态相关元素
-  private loginStatusDiv!: HTMLDivElement
-  private loginDetailsDiv!: HTMLDivElement
-  private currentUrlSpan!: HTMLSpanElement
-  private pageTitleSpan!: HTMLSpanElement
-  private checkTimeSpan!: HTMLSpanElement
+  // 门店表单相关元素
+  private storeForm!: HTMLFormElement
+  private storeNameInput!: HTMLInputElement
+  private mobileInput!: HTMLInputElement
+  private storeTypeSelect!: HTMLSelectElement
+  private assistantSelect!: HTMLSelectElement
 
   // 标签页元素
   private mainTab!: HTMLButtonElement
@@ -47,13 +47,14 @@ class RendererApp {
     this.initializeElements()
     this.setupEventListeners()
     this.loadConfig()
+    this.initializeStoreForm()
     this.startStatusUpdater()
     this.addLog('应用程序已启动', 'info')
   }
 
   private initializeElements(): void {
     this.installBtn = document.getElementById('installBtn') as HTMLButtonElement
-    this.checkLoginBtn = document.getElementById('checkLoginBtn') as HTMLButtonElement
+    this.executeBtn = document.getElementById('executeBtn') as HTMLButtonElement
     this.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement
     this.statusDiv = document.getElementById('status') as HTMLDivElement
     this.logsDiv = document.getElementById('logs') as HTMLDivElement
@@ -61,12 +62,12 @@ class RendererApp {
     this.progressBar = document.getElementById('progressBar') as HTMLDivElement
     this.progressText = document.getElementById('progressText') as HTMLDivElement
 
-    // 登录状态相关元素
-    this.loginStatusDiv = document.getElementById('loginStatus') as HTMLDivElement
-    this.loginDetailsDiv = document.getElementById('loginDetails') as HTMLDivElement
-    this.currentUrlSpan = document.getElementById('currentUrl') as HTMLSpanElement
-    this.pageTitleSpan = document.getElementById('pageTitle') as HTMLSpanElement
-    this.checkTimeSpan = document.getElementById('checkTime') as HTMLSpanElement
+    // 门店表单相关元素
+    this.storeForm = document.getElementById('storeForm') as HTMLFormElement
+    this.storeNameInput = document.getElementById('storeName') as HTMLInputElement
+    this.mobileInput = document.getElementById('mobile') as HTMLInputElement
+    this.storeTypeSelect = document.getElementById('storeType') as HTMLSelectElement
+    this.assistantSelect = document.getElementById('assistant') as HTMLSelectElement
 
     // 标签页元素
     this.mainTab = document.getElementById('mainTab') as HTMLButtonElement
@@ -92,7 +93,7 @@ class RendererApp {
   }
 
   private setupEventListeners(): void {
-    this.checkLoginBtn.addEventListener('click', () => this.checkWeWorkLogin())
+    this.executeBtn.addEventListener('click', () => this.executeTask())
     this.stopBtn.addEventListener('click', () => this.stopExecution())
 
     // 标签页切换
@@ -135,6 +136,108 @@ class RendererApp {
       this.configTab.classList.add('active')
       this.configPanel.classList.add('active')
       this.loadConfig() // 切换到配置页面时重新加载配置
+    }
+  }
+
+  private async initializeStoreForm(): Promise<void> {
+    try {
+      // 获取配置数据来填充下拉框选项
+      const result = await window.electronAPI.getConfig()
+      if (result.success && result.config) {
+        // 填充门店类型选项
+        this.populateSelectOptions(this.storeTypeSelect, result.config.STORE_TYPE || [])
+
+        // 填充小助理选项
+        this.populateSelectOptions(this.assistantSelect, result.config.USER_MAPPINGS || [])
+      }
+
+      // 添加表单验证
+      this.setupFormValidation()
+
+      this.addLog('门店表单初始化完成', 'info')
+    } catch (error) {
+      this.addLog('门店表单初始化失败: ' + error, 'error')
+    }
+  }
+
+  private populateSelectOptions(selectElement: HTMLSelectElement, options: string[]): void {
+    // 清除除了默认选项之外的所有选项
+    while (selectElement.children.length > 1) {
+      selectElement.removeChild(selectElement.lastChild!)
+    }
+
+    // 添加新选项
+    options.forEach((option) => {
+      const optionElement = document.createElement('option')
+      optionElement.value = option
+      optionElement.textContent = option
+      selectElement.appendChild(optionElement)
+    })
+  }
+
+  private setupFormValidation(): void {
+    // 手机号验证
+    this.mobileInput.addEventListener('input', () => {
+      const value = this.mobileInput.value
+      const isValid = /^[0-9]{11}$/.test(value)
+
+      if (value.length > 0 && !isValid) {
+        this.mobileInput.setCustomValidity('请输入11位有效手机号')
+      } else {
+        this.mobileInput.setCustomValidity('')
+      }
+    })
+
+    // 实时验证所有必填字段
+    const requiredFields = [
+      this.storeNameInput,
+      this.mobileInput,
+      this.storeTypeSelect,
+      this.assistantSelect,
+    ]
+    requiredFields.forEach((field) => {
+      field.addEventListener('change', () => this.validateForm())
+      field.addEventListener('input', () => this.validateForm())
+    })
+  }
+
+  private validateForm(): boolean {
+    const storeName = this.storeNameInput.value.trim()
+    const mobile = this.mobileInput.value.trim()
+    const storeType = this.storeTypeSelect.value
+    const assistant = this.assistantSelect.value
+
+    // 详细的表单验证
+    const validations = {
+      storeName: storeName.length >= 2,
+      mobile: /^[0-9]{11}$/.test(mobile),
+      storeType: storeType !== '',
+      assistant: assistant !== '',
+    }
+
+    const isValid = Object.values(validations).every(Boolean)
+
+    // 更新执行按钮状态和样式
+    this.executeBtn.disabled = !isValid || this.isRunning
+
+    // 更新按钮文本
+    if (this.isRunning) {
+      this.executeBtn.querySelector('.btn-text')!.textContent = '执行中...'
+    } else if (isValid) {
+      this.executeBtn.querySelector('.btn-text')!.textContent = '执行任务'
+    } else {
+      this.executeBtn.querySelector('.btn-text')!.textContent = '请完善信息'
+    }
+
+    return isValid
+  }
+
+  private getStoreFormData() {
+    return {
+      storeName: this.storeNameInput.value.trim(),
+      mobile: this.mobileInput.value.trim(),
+      storeType: this.storeTypeSelect.value,
+      assistant: this.assistantSelect.value,
     }
   }
 
@@ -327,70 +430,98 @@ class RendererApp {
     }, 3000)
   }
 
-  private async checkWeWorkLogin(): Promise<void> {
+  private async executeTask(): Promise<void> {
     try {
+      // 第一层验证：基本表单验证
+      if (!this.validateForm()) {
+        this.addLog('❌ 请填写完整的门店信息', 'error')
+        this.showValidationErrors()
+        return
+      }
+
+      const storeData = this.getStoreFormData()
+
+      // 第二层验证：详细业务逻辑验证
+      const validationResult = this.validateStoreData(storeData)
+      if (!validationResult.isValid) {
+        this.addLog(`❌ 信息验证失败: ${validationResult.message}`, 'error')
+        return
+      }
+
       this.isRunning = true
-      this.checkLoginBtn.disabled = true
-      this.checkLoginBtn.textContent = '检查中...'
+      this.executeBtn.disabled = true
       this.stopBtn.disabled = false
-      this.updateLoginStatus('checking', '正在检查登录状态...')
-      this.addLog('开始检查企微登录状态', 'info')
+      this.validateForm() // 更新按钮文本为"执行中..."
 
-      const result = await window.electronAPI.checkWeWorkLogin()
+      this.addLog(`🚀 开始执行任务`, 'info')
+      this.addLog(`📋 门店信息: ${storeData.storeName} (${storeData.storeType})`, 'info')
+      this.addLog(`📞 联系方式: ${storeData.mobile}`, 'info')
+      this.addLog(`👤 执行助理: ${storeData.assistant}`, 'info')
 
-      // 如果有登录数据，显示详细信息
-      if (result.data) {
-        const loginData = result.data
-        const status = loginData.isLoggedIn ? 'logged-in' : 'not-logged-in'
-        const message = loginData.isLoggedIn ? '已登录' : '未登录'
+      const result = await window.electronAPI.executeTask()
 
-        this.updateLoginStatus(status, message)
-        this.updateLoginDetails(loginData)
-        this.addLog(result.message, result.success ? 'success' : 'error')
+      // 处理执行结果
+      if (result.success) {
+        this.addLog(`✅ ${result.message}`, 'success')
       } else {
-        // 没有登录数据时的处理
-        const status = result.success ? 'logged-in' : 'not-logged-in'
-        const message = result.success ? '已登录' : '检查失败'
-
-        this.updateLoginStatus(status, message)
-        this.updateLoginDetails(null)
-        this.addLog(result.message, result.success ? 'success' : 'error')
+        this.addLog(`❌ ${result.message}`, 'error')
       }
     } catch (error) {
-      this.updateLoginStatus('not-logged-in', '检查失败')
-      this.updateLoginDetails(null)
-      this.addLog(`检查登录状态失败: ${error}`, 'error')
+      this.addLog(`💥 任务执行异常: ${error}`, 'error')
     } finally {
       this.isRunning = false
-      this.checkLoginBtn.disabled = false
-      this.checkLoginBtn.textContent = '检查企微登录'
+      this.validateForm() // 重新验证表单以更新按钮状态
       this.stopBtn.disabled = true
     }
   }
 
-  private updateLoginStatus(
-    status: 'logged-in' | 'not-logged-in' | 'checking',
-    message: string,
-  ): void {
-    // 清除所有状态类
-    this.loginStatusDiv.classList.remove('logged-in', 'not-logged-in', 'checking')
+  private validateStoreData(storeData: any): { isValid: boolean; message: string } {
+    // 门店名称验证
+    if (storeData.storeName.length < 2) {
+      return { isValid: false, message: '门店名称至少需要2个字符' }
+    }
 
-    // 添加新状态类
-    this.loginStatusDiv.classList.add(status)
-    this.loginStatusDiv.textContent = message
+    if (storeData.storeName.length > 50) {
+      return { isValid: false, message: '门店名称不能超过50个字符' }
+    }
+
+    // 手机号验证
+    if (!/^1[3-9]\d{9}$/.test(storeData.mobile)) {
+      return { isValid: false, message: '请输入有效的手机号码' }
+    }
+
+    // 门店类型验证
+    if (!storeData.storeType || storeData.storeType === '') {
+      return { isValid: false, message: '请选择门店类型' }
+    }
+
+    // 助理验证
+    if (!storeData.assistant || storeData.assistant === '') {
+      return { isValid: false, message: '请选择执行助理' }
+    }
+
+    return { isValid: true, message: '验证通过' }
   }
 
-  private updateLoginDetails(loginData: any): void {
-    if (loginData) {
-      this.currentUrlSpan.textContent = loginData.currentUrl || '-'
-      this.pageTitleSpan.textContent = loginData.pageTitle || '-'
-      this.checkTimeSpan.textContent = loginData.timestamp
-        ? new Date(loginData.timestamp).toLocaleString()
-        : '-'
+  private showValidationErrors(): void {
+    const storeName = this.storeNameInput.value.trim()
+    const mobile = this.mobileInput.value.trim()
+    const storeType = this.storeTypeSelect.value
+    const assistant = this.assistantSelect.value
 
-      this.loginDetailsDiv.style.display = 'block'
-    } else {
-      this.loginDetailsDiv.style.display = 'none'
+    if (!storeName) {
+      this.addLog('📝 请输入门店名称', 'error')
+    }
+    if (!mobile) {
+      this.addLog('📞 请输入手机号码', 'error')
+    } else if (!/^[0-9]{11}$/.test(mobile)) {
+      this.addLog('📞 请输入正确的11位手机号码', 'error')
+    }
+    if (!storeType) {
+      this.addLog('🏪 请选择门店类型', 'error')
+    }
+    if (!assistant) {
+      this.addLog('👤 请选择执行助理', 'error')
     }
   }
 
