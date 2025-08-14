@@ -245,8 +245,16 @@ export class WeworkManager extends BaseManager {
         if (!avatarUpdateResult.success) {
           return avatarUpdateResult
         }
+        await this.wait(1000)
       } else {
         console.log('跳过头像更新(非店中店类型)')
+      }
+
+      // 步骤5: 修改部门信息
+      console.log('步骤5: 修改部门信息...')
+      const departmentResult = await this.updateDepartment(page, param.storeType)
+      if (!departmentResult.success) {
+        return departmentResult
       }
 
       // 步骤6: 保存更改
@@ -886,11 +894,75 @@ export class WeworkManager extends BaseManager {
       }
     }
   }
+
+  /**
+   * 更新部门信息
+   */
+  private async updateDepartment(
+    page: puppeteer.Page,
+    storeType: string,
+  ): Promise<AutomationResult> {
+    try {
+      // 确定搜索的部门名称
+      const departmentName = storeType === '店中店' ? '邻家优选店中店' : '邻家优选社区'
+      console.log(`准备搜索部门: ${departmentName}`)
+
+      // 点击部门修改按钮
+      const departmentSelector =
+        'div.js_edit_container.member_edit > form > div.member_edit_formWrap.member_edit_formWrap_Five > div:nth-child(3) > div:nth-child(1) > div.member_edit_item_right > div.ww_groupSelBtn.js_party_select_result > a'
+      await this.waitAndClick(page, departmentSelector, 10000, '部门修改按钮')
+      await this.wait(2000) // 等待弹框加载
+
+      // 删除所有现有部门
+      const existingDepartments = await page.$$(
+        'div > div.qui_dialog_body.ww_dialog_body > div > div > div > div.multiPickerDlg_right > div.multiPickerDlg_right_cnt > div > ul > li > a',
+      )
+      if (existingDepartments.length > 0) {
+        console.log(`删除 ${existingDepartments.length} 个现有部门`)
+        for (const dept of existingDepartments) {
+          await dept.click()
+          await this.wait(500)
+        }
+      }
+
+      // 在搜索框中输入部门名称
+      await this.waitAndFill(
+        page,
+        'div > div.qui_dialog_body.ww_dialog_body > div > div > div > div.multiPickerDlg_left.js_select > div.multiPickerDlg_left_cnt > div.multiPickerDlg_search.multiPickerDlg_commCnt > span > input',
+        departmentName,
+        10000,
+        '部门搜索框',
+      )
+      await this.wait(2000) // 等待搜索结果
+
+      // 点击第一个搜索结果
+      await this.waitAndClick(page, '#searchResult > ul > li', 10000, '第一个搜索结果')
+      await this.wait(1000)
+
+      // 点击确认按钮
+      await this.waitAndClick(page, '#footer_submit_btn', 10000, '确认按钮')
+      await this.wait(2000)
+
+      console.log(`✓ 部门更新成功: ${departmentName}`)
+      return { success: true, message: '部门更新成功' }
+    } catch (error) {
+      console.error('部门更新失败:', error)
+      return {
+        success: false,
+        message: `部门更新失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      }
+    }
+  }
 }
 
 // ;(async function () {
 //   const instance = WeworkManager.getInstance()
 //   await instance.checkWeWorkLogin()
+//   await instance.changeContactInfo({
+//     mobile: '13052828856',
+//     storeType: '店中店',
+//     storeName: '楠子1店',
+//   })
 //   // await instance.createGroupLiveCode({
 //   //   storeName: '楠子1店',
 //   //   storeType: '店中店',

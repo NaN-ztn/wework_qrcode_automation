@@ -84,6 +84,22 @@ export class BrowserInstance {
           '--keep-alive-for-test',
           '--no-first-run',
           '--no-default-browser-check',
+          // 内存和性能优化参数
+          '--memory-pressure-off',
+          '--max_old_space_size=4096',
+          '--disable-background-mode',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-java',
+          '--disable-notifications',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          // GPU和渲染优化
+          '--use-gl=desktop',
+          '--ignore-gpu-blacklist',
+          '--disable-gpu-sandbox',
+          '--enable-accelerated-2d-canvas',
+          '--enable-gpu-rasterization',
         ],
       }
 

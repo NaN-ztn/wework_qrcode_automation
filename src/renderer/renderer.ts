@@ -767,8 +767,13 @@ class RendererApp {
   private resetButtonStates(): void {
     // 恢复执行按钮状态
     this.executeBtn.disabled = false
-    this.executeBtn.textContent = '▶ 执行任务'
     this.executeBtn.classList.remove('running')
+
+    // 恢复执行按钮的原始HTML结构
+    this.executeBtn.innerHTML = `
+      <span class="btn-icon">▶</span>
+      <span class="btn-text">执行任务</span>
+    `
 
     // 禁用停止按钮
     this.stopBtn.disabled = true

@@ -1492,10 +1492,11 @@ main::before {
   display: flex;
   align-items: center;
   gap: 0;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   font-size: var(--text-sm);
   font-weight: 600;
-  min-width: 70px;
+  min-width: 100px;
+  height: 40px;
   justify-content: center;
   position: relative;
   overflow: hidden;
@@ -1569,6 +1570,18 @@ main::before {
 .form-actions .btn-primary:not(:disabled):hover {
   background: linear-gradient(135deg, var(--primary-600), var(--primary-800));
   box-shadow: var(--shadow-xl), 0 0 20px rgba(59, 130, 246, 0.4);
+}
+
+/* 现代化停止按钮样式 */
+.form-actions .btn-danger {
+  background: var(--gradient-error);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-lg), 0 0 15px rgba(239, 68, 68, 0.3);
+}
+.form-actions .btn-danger:not(:disabled):hover {
+  background: linear-gradient(135deg, var(--error-600), var(--error-800));
+  box-shadow: var(--shadow-xl), 0 0 20px rgba(239, 68, 68, 0.4);
 }
 
 /* 现代化日志相关样式 */
