@@ -14,6 +14,7 @@ class RendererApp {
   private mobileInput!: HTMLInputElement
   private storeTypeSelect!: HTMLSelectElement
   private assistantSelect!: HTMLSelectElement
+  private weibanAssistantSelect!: HTMLSelectElement
 
   // 标签页元素
   private mainTab!: HTMLButtonElement
@@ -99,6 +100,7 @@ class RendererApp {
     this.mobileInput = document.getElementById('mobile') as HTMLInputElement
     this.storeTypeSelect = document.getElementById('storeType') as HTMLSelectElement
     this.assistantSelect = document.getElementById('assistant') as HTMLSelectElement
+    this.weibanAssistantSelect = document.getElementById('weibanAssistant') as HTMLSelectElement
 
     // 标签页元素
     this.mainTab = document.getElementById('mainTab') as HTMLButtonElement
@@ -220,6 +222,9 @@ class RendererApp {
 
         // 填充小助理选项
         this.populateSelectOptions(this.assistantSelect, result.config.USER_MAPPINGS || [])
+
+        // 填充微伴承接人选项
+        this.populateSelectOptions(this.weibanAssistantSelect, result.config.USER_MAPPINGS || [])
       }
 
       // 添加表单验证
@@ -309,6 +314,7 @@ class RendererApp {
       mobile: this.mobileInput.value.trim(),
       storeType: this.storeTypeSelect.value,
       assistant: this.assistantSelect.value,
+      weibanAssistant: this.weibanAssistantSelect.value,
     }
   }
 

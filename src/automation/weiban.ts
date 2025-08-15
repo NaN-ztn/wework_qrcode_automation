@@ -121,6 +121,7 @@ export class WeibanManager extends BaseManager {
     storeName: string
     storeType: string
     assistant: string
+    weibanAssistant?: string
   }): Promise<AutomationResult> {
     try {
       console.log('=== 开始创建微伴活码 ===')
@@ -177,9 +178,15 @@ export class WeibanManager extends BaseManager {
       await this.wait(2000)
 
       // 在成员名称输入框输入助手名称
+      // 使用微伴承接人，如果没有则使用小助理
+      const memberName = parm.weibanAssistant || parm.assistant
+      console.log(
+        `使用成员名称: ${memberName} (来源: ${parm.weibanAssistant ? '微伴承接人' : '小助理'})`,
+      )
+
       const memberNameInputSelector =
         'body > div.__ameModal__ > section > div > div.ame-modal-content > section > section > div.ame-add-staff-left > p.ame-tool-top > span > input'
-      await this.waitAndFill(page, memberNameInputSelector, parm.assistant, 15000, '成员名称输入框')
+      await this.waitAndFill(page, memberNameInputSelector, memberName, 15000, '成员名称输入框')
       await this.wait(1000)
 
       // 点击选择第一个成员

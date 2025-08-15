@@ -199,6 +199,7 @@ class ElectronApp {
           mobile: string
           storeType: string
           assistant: string
+          weibanAssistant?: string
         },
       ) => {
         try {
@@ -297,6 +298,7 @@ class ElectronApp {
             storeName: storeData.storeName,
             storeType: storeData.storeType,
             assistant: storeData.assistant,
+            weibanAssistant: storeData.weibanAssistant,
           })
 
           if (!weibanQrResult.success) {
