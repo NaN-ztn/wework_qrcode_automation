@@ -641,13 +641,65 @@ export class WeworkManager extends BaseManager {
       )
       await this.wait(3000) // 等待群主选择页面加载
 
-      // 步骤4: 在搜索成员框输入助手名称
+      // 步骤4: 在搜索成员框输入助手名称（带重试逻辑）
       console.log('\n=== 步骤4: 搜索助手 ===')
-      await this.waitAndFill(page, '#memberSearchInput', param.assistant, 10000, '成员搜索框')
-      await this.wait(2000) // 等待搜索结果异步加载
 
-      // 等待搜索结果出现
-      await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
+      let searchSuccess = false
+      const maxRetries = 5
+      const retryDelay = 5000 // 5秒间隔
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🔄 第${attempt}/${maxRetries}次尝试搜索助手: ${param.assistant}`)
+
+          // 输入助手名称
+          await this.waitAndFill(page, '#memberSearchInput', param.assistant, 10000, '成员搜索框')
+          await this.wait(2000) // 等待搜索结果异步加载
+
+          // 等待搜索结果出现
+          await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
+
+          // 检查是否有搜索结果
+          const hasResults = await page.evaluate(() => {
+            const searchResult = document.querySelector('#searchResult')
+            return searchResult && searchResult.children.length > 0
+          })
+
+          if (hasResults) {
+            console.log(`✅ 第${attempt}次尝试成功找到助手`)
+            searchSuccess = true
+            break
+          } else {
+            throw new Error('搜索结果为空')
+          }
+        } catch (error) {
+          console.warn(
+            `⚠️ 第${attempt}次搜索助手失败:`,
+            error instanceof Error ? error.message : '未知错误',
+          )
+
+          if (attempt < maxRetries) {
+            console.log(`⏳ ${retryDelay / 1000}秒后进行第${attempt + 1}次重试...`)
+            await this.wait(retryDelay)
+
+            // 清空输入框准备重试
+            try {
+              await this.waitAndFill(page, '#memberSearchInput', '', 5000, '清空成员搜索框')
+              await page.keyboard.press('Enter')
+              await this.wait(2000)
+            } catch (clearError) {
+              console.warn('清空输入框失败:', clearError)
+            }
+          }
+        }
+      }
+
+      if (!searchSuccess) {
+        return {
+          success: false,
+          message: `搜索助手失败: 已重试${maxRetries}次仍无法找到助手"${param.assistant}"，请检查助手名称是否正确`,
+        }
+      }
 
       // 步骤5: 点击第一个搜索项
       console.log('\n=== 步骤5: 选择搜索结果 ===')
@@ -952,18 +1004,18 @@ export class WeworkManager extends BaseManager {
   }
 }
 
-// ;(async function () {
-//   const instance = WeworkManager.getInstance()
-//   await instance.checkWeWorkLogin()
-//   await instance.changeContactInfo({
-//     mobile: '13052828856',
-//     storeType: '店中店',
-//     storeName: '楠子1店',
-//   })
-//   // await instance.createGroupLiveCode({
-//   //   storeName: '楠子1店',
-//   //   storeType: '店中店',
-//   //   assistant: '楠子1店',
-//   // })
-//   // await instance.forceCloseBrowser()
-// })()
+;(async function () {
+  const instance = WeworkManager.getInstance()
+  await instance.checkWeWorkLogin()
+  // await instance.changeContactInfo({
+  //   mobile: '13052828856',
+  //   storeType: '店中店',
+  //   storeName: '楠子1店',
+  // })
+  await instance.createGroupLiveCode({
+    storeName: '楠子1店',
+    storeType: '店中店',
+    assistant: '侧耳',
+  })
+  // await instance.forceCloseBrowser()
+})()
