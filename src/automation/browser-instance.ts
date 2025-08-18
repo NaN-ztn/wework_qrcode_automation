@@ -100,6 +100,7 @@ export class BrowserInstance {
           '--disable-gpu-sandbox',
           '--enable-accelerated-2d-canvas',
           '--enable-gpu-rasterization',
+          '--disable-features=VizDisplayCompositor',
         ],
       }
 
@@ -137,7 +138,52 @@ export class BrowserInstance {
    */
   public async createPage(): Promise<puppeteer.Page> {
     const browser = await this.getBrowser()
-    return await browser.newPage()
+    const page = await browser.newPage()
+
+    // 使用setViewport自适应显示器尺寸
+    try {
+      // 获取屏幕真实尺寸信息
+      const screenInfo = await page.evaluate(() => {
+        return {
+          screenWidth: window.screen.width,
+          screenHeight: window.screen.height,
+          availWidth: window.screen.availWidth,
+          availHeight: window.screen.availHeight,
+          devicePixelRatio: window.devicePixelRatio || 1,
+        }
+      })
+
+      console.log('📱 屏幕信息:', screenInfo)
+
+      // 使用Puppeteer的setViewport API自适应屏幕
+      // 使用屏幕可用区域尺寸确保最大化利用屏幕空间
+      await page.setViewport({
+        width: screenInfo.availWidth, // 使用屏幕可用宽度
+        height: screenInfo.availHeight, // 使用屏幕可用高度
+        deviceScaleFactor: screenInfo.devicePixelRatio, // 自适应设备缩放
+        hasTouch: false,
+        isMobile: false,
+        isLandscape: screenInfo.screenWidth > screenInfo.screenHeight,
+      })
+
+      console.log('✅ Viewport已自适应显示器尺寸')
+    } catch (error) {
+      console.warn('设置自适应viewport失败:', error)
+
+      // 降级方案：使用固定尺寸
+      try {
+        await page.setViewport({
+          width: 1400,
+          height: 900,
+          deviceScaleFactor: 1,
+        })
+        console.log('🔄 已使用降级viewport配置')
+      } catch (fallbackError) {
+        console.error('降级viewport设置也失败:', fallbackError)
+      }
+    }
+
+    return page
   }
 
   /**

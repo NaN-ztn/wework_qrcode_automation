@@ -28,8 +28,7 @@ export class WeworkManager extends BaseManager {
 
       const page = await this.createPage()
 
-      // 设置页面参数
-      await page.setViewport({ width: 1200, height: 800 })
+      // 页面已在browser-instance.ts中自适应配置viewport
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       )
@@ -122,8 +121,7 @@ export class WeworkManager extends BaseManager {
 
     const page = await this.createPage()
 
-    // 设置页面参数
-    await page.setViewport({ width: 1200, height: 800 })
+    // 页面已在browser-instance.ts中自适应配置viewport
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     )
@@ -581,8 +579,7 @@ export class WeworkManager extends BaseManager {
 
       const page = await this.createPage()
 
-      // 设置页面参数
-      await page.setViewport({ width: 1200, height: 800 })
+      // 页面已在browser-instance.ts中自适应配置viewport
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       )
@@ -642,7 +639,7 @@ export class WeworkManager extends BaseManager {
         10000,
         '选择群主按钮',
       )
-      await this.wait(1500) // 等待群主选择页面加载
+      await this.wait(3000) // 等待群主选择页面加载
 
       // 步骤4: 在搜索成员框输入助手名称
       console.log('\n=== 步骤4: 搜索助手 ===')

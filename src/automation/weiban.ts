@@ -27,8 +27,8 @@ export class WeibanManager extends BaseManager {
 
       const page = await this.createPage()
 
-      // 设置页面参数
-      await page.setViewport({ width: 1200, height: 800 })
+      // 设置页面参数 - 居中窗口大小
+      // 页面已在browser-instance.ts中自适应配置viewport
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       )
@@ -132,8 +132,8 @@ export class WeibanManager extends BaseManager {
 
       const page = await this.createPage()
 
-      // 设置页面参数
-      await page.setViewport({ width: 1200, height: 800 })
+      // 设置页面参数 - 居中窗口大小
+      // 页面已在browser-instance.ts中自适应配置viewport
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       )
@@ -286,7 +286,7 @@ export class WeibanManager extends BaseManager {
         const tagGroupConfirmSelector =
           '#operator-tag-group-dialog > div.operator-btn-wrap > div > button.ame-btn.ml-12.ame-btn-primary.ame-btn-md-2.pc.button.__ameButton__'
         await this.waitAndClick(page, tagGroupConfirmSelector, 15000, '标签组确认')
-        await this.wait(2000)
+        await this.wait(5000)
 
         // 轮询搜索刚创建的标签，最多重试5次
         console.log(`开始轮询搜索刚创建的标签: ${tagName}`)
@@ -599,15 +599,15 @@ export class WeibanManager extends BaseManager {
   }
 }
 
-// ;(async function () {
-//   const instance = WeibanManager.getInstance()
-//   await instance.checkWeibanLogin()
-//   await instance.createWeibanLiveCode({
-//     storeName: '楠子1店',
-//     storeType: '独立店',
-//     assistant: '王莹',
-//     qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
-//     qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
-//   })
-//   // await instance.forceCloseBrowser()
-// })()
+;(async function () {
+  const instance = WeibanManager.getInstance()
+  await instance.checkWeibanLogin()
+  await instance.createWeibanLiveCode({
+    storeName: '楠子1店',
+    storeType: '独立店',
+    assistant: '王莹',
+    qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
+    qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
+  })
+  // await instance.forceCloseBrowser()
+})()
