@@ -290,7 +290,7 @@ export class WeibanManager extends BaseManager {
 
         // 轮询搜索刚创建的标签，最多重试5次
         console.log(`开始轮询搜索刚创建的标签: ${tagName}`)
-        const maxRetries = 5
+        const maxRetries = 10
         const retryInterval = 10000 // 10秒
         let foundNewTag = false
 

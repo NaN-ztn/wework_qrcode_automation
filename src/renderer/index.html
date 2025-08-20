@@ -13,6 +13,7 @@
             <nav class="nav-tabs">
                 <button id="mainTab" class="tab-btn active">主页</button>
                 <button id="historyTab" class="tab-btn">历史任务</button>
+                <button id="groupReplaceTab" class="tab-btn">群码替换</button>
                 <button id="configTab" class="tab-btn">环境配置</button>
             </nav>
         </header>
@@ -191,6 +192,58 @@
                 </div>
             </div>
 
+            <!-- 群码替换页面 -->
+            <div id="groupReplacePanel" class="tab-content">
+                <div class="group-replace-header">
+                    <h2>群码替换功能</h2>
+                    <p class="feature-description">自动搜索指定关键词的群组，并执行替换操作</p>
+                </div>
+                
+                <div class="group-replace-content">
+                    <form id="groupReplaceForm" class="group-replace-form">
+                        <div class="form-section">
+                            <h3>搜索参数</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="groupSearchKeyword">搜索关键词 *</label>
+                                    <input type="text" id="groupSearchKeyword" name="searchKeyword" 
+                                           value="LJYX" placeholder="请输入搜索关键词" required>
+                                    <small class="form-text">搜索包含此关键词的群组进行替换操作</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" id="executeGroupReplaceBtn" class="btn btn-primary btn-large">
+                                <span class="btn-icon">🚀</span>
+                                <span class="btn-text">开始群码替换</span>
+                            </button>
+                            <button type="button" id="stopGroupReplaceBtn" class="btn btn-danger" disabled>
+                                <span class="btn-icon">⏹</span>
+                                <span class="btn-text">停止替换</span>
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- 执行状态和日志 -->
+                    <div class="log-panel">
+                        <div class="log-header">
+                            <h3>操作日志</h3>
+                            <div class="log-controls">
+                                <button id="clearGroupReplaceLogsBtn" class="btn btn-small">清空日志</button>
+                                <button id="autoScrollGroupReplaceBtn" class="btn btn-small active" data-auto-scroll="true">自动滚动</button>
+                            </div>
+                        </div>
+                        <div id="groupReplaceLogs" class="log-container">
+                            <div class="log-placeholder">
+                                <div class="placeholder-icon">📝</div>
+                                <p>点击"开始群码替换"按钮执行任务，执行日志将在此显示</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 历史任务页面 -->
             <div id="historyPanel" class="tab-content">
                 <div class="history-header">
@@ -274,6 +327,16 @@
                             <label for="weibanQrCreate">微伴活码创建链接</label>
                             <input type="url" id="weibanQrCreate" name="WEIBAN_QR_CREATE_URL" required>
                             <small class="form-text">微伴渠道活码创建页面的完整URL</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weworkGroupManagementUrl">群聊管理链接</label>
+                            <input type="url" id="weworkGroupManagementUrl" name="WEWORK_GROUP_MANAGEMENT_URL" required>
+                            <small class="form-text">企业微信群聊管理页面的完整URL</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="weworkGroupMemberDeleteThreshold">群成员删除阈值</label>
+                            <input type="number" id="weworkGroupMemberDeleteThreshold" name="WEWORK_GROUP_MEMBER_DELETE_THRESHOLD" value="100" min="1">
+                            <small class="form-text">当群成员数量达到此阈值时，该群将被标记为删除并重新创建</small>
                         </div>
                     </div>
 

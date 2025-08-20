@@ -1,7 +1,15 @@
 import * as puppeteer from 'puppeteer'
 import * as fs from 'fs'
 import { ConfigManager } from '../utils/config-manager'
-import { AutomationResult } from '../types'
+import {
+  AutomationResult,
+  GroupReplaceOptions,
+  GroupInfo,
+  GroupReplaceResultData,
+  GroupOperationType,
+  GroupOperationRecord,
+  CollectGroupsResult,
+} from '../types'
 import { BaseManager } from './base'
 
 export class WeworkManager extends BaseManager {
@@ -608,137 +616,9 @@ export class WeworkManager extends BaseManager {
 
       console.log(`随机Emoji: ${randomEmoji}, 处理后店铺名: ${processedStoreName}`)
 
-      // 步骤1: 点击修改按钮
-      console.log('\n=== 步骤1: 点击修改按钮 ===')
-      await this.waitAndClick(
-        page,
-        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
-        10000,
-        '修改按钮',
-      )
-      await this.wait(1500) // 等待修改菜单展开
-
-      // 步骤2: 点击新建群聊按钮
-      console.log('\n=== 步骤2: 点击新建群聊按钮 ===')
-      await this.waitAndClick(
-        page,
-        '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > ul > li:nth-child(1) > a',
-        10000,
-        '新建群聊按钮',
-      )
-      await this.wait(2000) // 等待新建群聊弹框完全加载
-
-      // 等待弹框出现
-      await this.waitForElement(page, '#__dialog__MNDialog__', 10000, '新建群聊弹框')
-
-      // 步骤3: 点击选择群主
-      console.log('\n=== 步骤3: 选择群主 ===')
-      await this.waitAndClick(
-        page,
-        '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > div > a',
-        10000,
-        '选择群主按钮',
-      )
-      await this.wait(3000) // 等待群主选择页面加载
-
-      // 步骤4: 在搜索成员框输入助手名称（带重试逻辑）
-      console.log('\n=== 步骤4: 搜索助手 ===')
-
-      let searchSuccess = false
-      const maxRetries = 5
-      const retryDelay = 5000 // 5秒间隔
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          console.log(`🔄 第${attempt}/${maxRetries}次尝试搜索助手: ${param.assistant}`)
-
-          // 输入助手名称
-          await this.waitAndFill(page, '#memberSearchInput', param.assistant, 10000, '成员搜索框')
-          await this.wait(2000) // 等待搜索结果异步加载
-
-          // 等待搜索结果出现
-          await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
-
-          // 检查是否有搜索结果
-          const hasResults = await page.evaluate(() => {
-            const searchResult = document.querySelector('#searchResult')
-            return searchResult && searchResult.children.length > 0
-          })
-
-          if (hasResults) {
-            console.log(`✅ 第${attempt}次尝试成功找到助手`)
-            searchSuccess = true
-            break
-          } else {
-            throw new Error('搜索结果为空')
-          }
-        } catch (error) {
-          console.warn(
-            `⚠️ 第${attempt}次搜索助手失败:`,
-            error instanceof Error ? error.message : '未知错误',
-          )
-
-          if (attempt < maxRetries) {
-            console.log(`⏳ ${retryDelay / 1000}秒后进行第${attempt + 1}次重试...`)
-            await this.wait(retryDelay)
-
-            // 清空输入框准备重试
-            try {
-              await this.waitAndFill(page, '#memberSearchInput', '', 5000, '清空成员搜索框')
-              await page.keyboard.press('Enter')
-              await this.wait(2000)
-            } catch (clearError) {
-              console.warn('清空输入框失败:', clearError)
-            }
-          }
-        }
-      }
-
-      if (!searchSuccess) {
-        return {
-          success: false,
-          message: `搜索助手失败: 已重试${maxRetries}次仍无法找到助手"${param.assistant}"，请检查助手名称是否正确`,
-        }
-      }
-
-      // 步骤5: 点击第一个搜索项
-      console.log('\n=== 步骤5: 选择搜索结果 ===')
-      await this.waitAndClick(
-        page,
-        '#searchResult > ul > li > a > span:nth-child(1)',
-        10000,
-        '第一个搜索结果',
-      )
-      await this.wait(1000) // 等待选择状态更新
-
-      // 步骤6: 点击确认按钮
-      console.log('\n=== 步骤6: 确认群主选择 ===')
-      await this.waitAndClick(page, '#footer_submit_btn', 10000, '确认按钮')
-      await this.wait(2500) // 等待返回群创建页面并加载完成
-
-      // 步骤7: 输入群名称
-      console.log('\n=== 步骤7: 设置群名称 ===')
+      // 步骤1-8: 使用通用的群码操作之修改新建群聊方法
       const groupName = `${randomEmoji}邻家优选｜${processedStoreName}2群`
-      console.log(`群名称: ${groupName}`)
-
-      await this.waitAndFill(
-        page,
-        '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > input',
-        groupName,
-        10000,
-        '群名称输入框',
-      )
-      await this.wait(1000) // 等待群名称输入完成并验证
-
-      // 步骤8: 点击群名称确认按钮
-      console.log('\n=== 步骤8: 确认群名称设置 ===')
-      await this.waitAndClick(
-        page,
-        '#__dialog__MNDialog__ > div > div.qui_dialog_foot.ww_dialog_foot > a.qui_btn.ww_btn.ww_btn_Blue',
-        10000,
-        '群名称确认按钮',
-      )
-      await this.wait(3000) // 等待群名称确认并返回主配置页面
+      await this.modifyAndCreateGroupChat(page, groupName, param.assistant)
 
       // 步骤9: 点击使用模板
       console.log('\n=== 步骤9: 点击使用模板 ===')
@@ -974,6 +854,8 @@ export class WeworkManager extends BaseManager {
         }
       }
 
+      await this.wait(5000)
+
       // 在搜索框中输入部门名称
       await this.waitAndFill(
         page,
@@ -1002,20 +884,1185 @@ export class WeworkManager extends BaseManager {
       }
     }
   }
+
+  /**
+   * 群码自动替换群功能
+   * 基于参考项目的逻辑，自动搜索包含HK或DD关键字的群组，
+   * 提取群名称和群主信息，处理群名称数字递增，删除现有群成员并新建群聊
+   */
+  public async replaceGroupQrCode(options: GroupReplaceOptions = {}): Promise<AutomationResult> {
+    const startTime = Date.now()
+    const { searchKeyword = '' } = options
+
+    console.log('开始群码自动替换功能')
+    console.log(`搜索关键词: ${searchKeyword || '自动搜索HK/DD'}`)
+
+    try {
+      const config = ConfigManager.loadConfig()
+      const targetUrl = config.WEWORK_GROUP_MANAGEMENT_URL
+
+      const page = await this.createPage()
+
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      )
+
+      console.log(`导航到群聊管理页面: ${targetUrl}`)
+      const response = await page.goto(targetUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      })
+
+      if (!response) {
+        return {
+          success: false,
+          message: '页面加载失败',
+        }
+      }
+
+      await this.wait(2000)
+
+      // 收集群组信息并生成操作记录
+      const pluginResults = await this.collectValidGroups(page, searchKeyword)
+
+      if (Object.keys(pluginResults).length === 0) {
+        return {
+          success: false,
+          message: '未找到任何群组，无操作需要执行',
+          data: {
+            searchKeyword,
+            processedCount: 0,
+            successCount: 0,
+            failureCount: 0,
+            executionTime: Date.now() - startTime,
+            operationRecords: [],
+            processedGroups: [],
+          } as GroupReplaceResultData,
+        }
+      }
+
+      console.log(`\n=== 开始执行群组操作 ===`)
+
+      console.log(`需要操作的插件数: ${Object.keys(pluginResults).length}`)
+
+      // 按plugin串行执行操作，每个plugin有独立的editUrl
+      const operationRecords: GroupOperationRecord[] = []
+      let processedCount = 0
+      let successCount = 0
+      let failureCount = 0
+
+      for (const [pluginId, operations] of Object.entries(pluginResults)) {
+        try {
+          console.log(`\n=== 处理插件 ${pluginId} (${operations.length} 个操作) ===`)
+          const result = await this.processPluginOperations(page, pluginId, operations)
+
+          operationRecords.push(...result.records)
+          processedCount += result.processed
+          successCount += result.success
+          failureCount += result.failures
+
+          console.log(`插件 ${pluginId} 处理完成: 成功 ${result.success}, 失败 ${result.failures}`)
+        } catch (error) {
+          console.error(`处理插件 ${pluginId} 失败:`, error)
+          failureCount += operations.length
+
+          // 为该插件的所有操作标记失败
+          operationRecords.push(
+            ...operations.map((op) => ({
+              ...op,
+              success: false,
+              error: error instanceof Error ? error.message : '插件处理失败',
+            })),
+          )
+        }
+      }
+
+      console.log('\n=== 所有插件处理完成 ===')
+
+      const executionTime = Date.now() - startTime
+      console.log('\n=== 群码替换完成 ===')
+      console.log(`耗时: ${executionTime}ms`)
+
+      // 任务完成，关闭浏览器
+      console.log('群码替换任务完成，关闭浏览器...')
+      await this.forceCloseBrowser()
+      console.log('浏览器已关闭')
+
+      return {
+        success: true,
+        message: `群码替换完成，处理 ${processedCount} 个操作，成功 ${successCount} 个，失败 ${failureCount} 个`,
+        data: {
+          searchKeyword,
+          processedCount,
+          successCount,
+          failureCount,
+          executionTime,
+          operationRecords,
+          processedGroups: [],
+        } as GroupReplaceResultData,
+      }
+    } catch (error) {
+      const executionTime = Date.now() - startTime
+      console.error('群码替换失败:', error)
+
+      // 任务失败，也要关闭浏览器
+      console.log('群码替换任务失败，关闭浏览器...')
+      try {
+        await this.forceCloseBrowser()
+        console.log('浏览器已关闭')
+      } catch (closeError) {
+        console.error('关闭浏览器失败:', closeError)
+      }
+
+      return {
+        success: false,
+        message: `群码替换失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        data: {
+          searchKeyword,
+          processedCount: 0,
+          successCount: 0,
+          failureCount: 0,
+          executionTime,
+          operationRecords: [],
+          processedGroups: [],
+        } as GroupReplaceResultData,
+      }
+    }
+  }
+
+  /**
+   * 收集符合条件的群组信息
+   * 新逻辑：检查DD/HK关键词和群人数，生成操作记录
+   */
+  private async collectValidGroups(
+    page: puppeteer.Page,
+    searchKeyword: string,
+  ): Promise<CollectGroupsResult> {
+    console.log('使用网络请求监听方式收集群组信息...')
+
+    // 使用base中的网络监听方法
+    await this.setupNetworkInterception(page, false)
+
+    // 构建搜索关键词
+    const finalSearchKeyword = searchKeyword && searchKeyword.trim() !== '' ? searchKeyword : ''
+
+    console.log(`搜索关键词: ${finalSearchKeyword}`)
+
+    // 轮询所有页数，获取所有插件的变更操作
+    let currentPage = 1
+    const apiResponses: any[] = []
+    let nextButton: puppeteer.ElementHandle | null = null
+
+    do {
+      console.log(`正在收集第 ${currentPage} 页数据...`)
+
+      try {
+        // 先设置Promise监听，再执行查询操作
+        const apiResponsePromise = this.waitForApiResponse<any>(
+          page,
+          'chatGroup/listPlugin',
+          10000,
+          '群组列表',
+        )
+
+        // 执行搜索触发API调用
+        currentPage === 1
+          ? await this.performApiSearch(page, finalSearchKeyword)
+          : await nextButton?.click()
+
+        const apiResponse = await apiResponsePromise
+
+        if (apiResponse?.data?.pluglist?.length > 0) {
+          apiResponses.push(apiResponse)
+          console.log(`第 ${currentPage} 页获取到 ${apiResponse.data.pluglist.length} 个插件`)
+        } else {
+          console.log(`第 ${currentPage} 页没有数据，结束收集`)
+          break
+        }
+      } catch (error) {
+        console.warn(`第 ${currentPage} 页API响应失败:`, error)
+        break
+      }
+
+      // 检查是否有下一页，优化检查逻辑
+      nextButton = await this.checkNextPage(page)
+      if (!nextButton) {
+        console.log(`已到达最后一页，共收集 ${currentPage} 页数据`)
+        break
+      }
+      currentPage++
+      await this.wait(2000) // 页面切换等待
+    } while (true)
+
+    const totalPlugins = apiResponses.reduce(
+      (sum, res) => sum + (res?.data?.pluglist?.length || 0),
+      0,
+    )
+    console.log(`分页收集完成，共 ${apiResponses.length} 页，总插件数: ${totalPlugins}`)
+
+    if (apiResponses.length === 0) {
+      console.warn('未收集到任何数据')
+      return {}
+    }
+
+    // 按插件聚合操作记录
+    const pluginOperations: Record<string, GroupOperationRecord[]> = {}
+
+    // 处理收集到的API响应数据
+    for (const responseData of apiResponses) {
+      if (!responseData?.data?.pluglist) continue
+
+      for (const plugin of responseData.data.pluglist) {
+        // 从pluginfo获取基本信息
+        const plugid = plugin.pluginfo?.plugid
+        if (!plugid) continue
+
+        pluginOperations[plugid] = []
+
+        // 从kfmember.roomids_detail获取群组详情
+        const roomDetails = plugin.kfmember?.roomids_detail || []
+
+        for (const room of roomDetails) {
+          const roomname = room.roomname || ''
+          const adminname = room.adminname || ''
+          const roomId = room.roomid || ''
+
+          // 获取更详细的群组信息（包含成员数量）
+          const detailedGroupInfo = await this.getGroupChatDetails(page, roomId)
+          const memberCount = detailedGroupInfo?.member_count || 0
+
+          console.log(`检查群组: ${roomname} (成员数: ${memberCount})`)
+
+          // 构建群组信息
+          const groupInfo: GroupInfo = {
+            title: roomname,
+            adminInfo: adminname,
+            roomId,
+            memberCount,
+          }
+
+          // 执行新的判断逻辑
+          const operationRecord = await this.determineGroupOperation(groupInfo)
+          pluginOperations[plugid].push(operationRecord)
+
+          console.log(
+            `群组 ${roomname} 操作决定: ${operationRecord.operationType} - ${operationRecord.reason}`,
+          )
+        }
+
+        // 判断删除操作和群数量相等则插入创建群聊操作
+        const deleteOperations = pluginOperations[plugid].filter(
+          (op) =>
+            op.operationType === GroupOperationType.DELETE_BY_KEYWORD ||
+            op.operationType === GroupOperationType.DELETE_BY_MEMBER_COUNT,
+        )
+
+        // 如果删除的群数量等于该插件的总群数量，添加一个创建操作
+        if (deleteOperations.length === roomDetails.length && deleteOperations.length > 0) {
+          console.log(
+            `插件 ${plugid} 中删除群数 (${deleteOperations.length}) 等于总群数 (${roomDetails.length})，添加一个创建操作`,
+          )
+
+          // 使用最后一个删除的群组信息
+          const lastDeletedGroup = deleteOperations[deleteOperations.length - 1]
+          const title = this.processGroupTitle(lastDeletedGroup.groupInfo.title)
+          const adminName = this.extractAdminName(lastDeletedGroup.groupInfo.adminInfo)
+
+          const createOperation: GroupOperationRecord = {
+            groupInfo: {
+              title, // 使用删除群组的名称
+              adminInfo: lastDeletedGroup.groupInfo.adminInfo, // 使用删除群组的群主信息
+              roomId: undefined, // 新建群组还没有roomId
+              memberCount: 0,
+            },
+            operationType: GroupOperationType.CREATE_NEW,
+            reason: `由于插件所有群组都被删除，创建新的群组替换`,
+          }
+          pluginOperations[plugid].push(createOperation)
+
+          console.log(`插件 ${plugid} 添加了一个创建群组操作，群名: ${title}, 群主: ${adminName}`)
+        }
+      }
+    }
+
+    const filteredPluginOperations = Object.fromEntries(
+      Object.entries(pluginOperations)
+        .map(([pluginId, operations]) => [
+          pluginId,
+          operations.filter((op) => op.operationType !== GroupOperationType.NO_ACTION),
+        ])
+        .filter(([pluginId, operations]) => operations.length),
+    )
+
+    console.log(`\n=== 群组分析完成 ===`)
+    console.log(`需要操作的插件数: ${Object.keys(filteredPluginOperations).length}`)
+
+    return filteredPluginOperations
+  }
+
+  /**
+   * 执行API搜索操作来触发网络请求
+   */
+  private async performApiSearch(page: puppeteer.Page, keyword: string): Promise<void> {
+    try {
+      console.log(`执行API搜索: ${keyword}`)
+
+      // 等待页面加载
+      await this.wait(2000)
+
+      // 查找并填写搜索框
+      await this.waitAndFill(
+        page,
+        '.qui_inputText.ww_inputText.ww_searchInput_text.js_cs_index_search_input',
+        keyword,
+        10000,
+        '搜索输入框',
+      )
+
+      // 触发搜索
+      await page.keyboard.press('Enter')
+      await this.wait(3000) // 等待更长时间以确保API请求完成
+      console.log(`API搜索完成: ${keyword}`)
+    } catch (error) {
+      console.warn('API搜索操作失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 确定群组应执行的操作
+   * @param groupInfo 群组信息
+   * @returns 操作记录
+   */
+  private async determineGroupOperation(groupInfo: GroupInfo): Promise<GroupOperationRecord> {
+    const { title, memberCount } = groupInfo
+
+    // 1. 检查是否包含DD/HK关键词
+    if (this.containsKeywords(title)) {
+      return {
+        groupInfo,
+        operationType: GroupOperationType.DELETE_BY_KEYWORD,
+        reason: `群名包含关键词DD/HK/dd/hk: ${title}`,
+      }
+    }
+
+    // 2. 检查群成员数量是否超过阈值
+    const config = ConfigManager.loadConfig()
+    const deleteThreshold = config.WEWORK_GROUP_MEMBER_DELETE_THRESHOLD || 100
+    if (memberCount && memberCount >= deleteThreshold) {
+      return {
+        groupInfo,
+        operationType: GroupOperationType.DELETE_BY_MEMBER_COUNT,
+        reason: `群成员数量超过${deleteThreshold}人: ${memberCount}人`,
+      }
+    }
+
+    // 3. 无需操作
+    return {
+      groupInfo,
+      operationType: GroupOperationType.NO_ACTION,
+      reason: `群组正常，无需操作 (成员数: ${memberCount || '未知'})`,
+    }
+  }
+
+  /**
+   * 检查群名是否包含DD/HK关键词
+   */
+  private containsKeywords(title: string): boolean {
+    if (!title) return false
+    const keywords = ['DD', 'HK', 'dd', 'hk']
+    return keywords.some((keyword) => title.includes(keyword))
+  }
+
+  /**
+   * 检查是否有下一页并点击（优化版本）
+   */
+  private async checkNextPage(
+    page: puppeteer.Page,
+  ): Promise<puppeteer.ElementHandle<Element> | null> {
+    try {
+      // 等待分页导航元素加载
+      await page.waitForSelector('.ww_pageNav_info_arrowWrap.js_pager_nextPage', { timeout: 5000 })
+      const nextButton = await page.$('.ww_pageNav_info_arrowWrap.js_pager_nextPage')
+      if (!nextButton) {
+        console.log('未找到下一页按钮')
+        return null
+      }
+
+      const isDisabled = await page.evaluate((el) => {
+        const htmlEl = el as HTMLElement
+        return (
+          (htmlEl.hasAttribute('disabled') && htmlEl.getAttribute('disabled') === 'disabled') ||
+          htmlEl.classList.contains('disabled') ||
+          htmlEl.style.display === 'none' ||
+          htmlEl.style.visibility === 'hidden'
+        )
+      }, nextButton)
+
+      if (!isDisabled) return nextButton
+
+      console.log('下一页按钮已禁用')
+      await nextButton.dispose()
+      return null
+    } catch (error) {
+      console.warn('检查下一页失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 处理群名称（将数字+1）
+   * 参考原项目逻辑
+   */
+  private processGroupTitle(title: string): string {
+    // 先截取"群"及前面的文字
+    const groupIndex = title.indexOf('群')
+    let processedTitle = title
+
+    if (groupIndex !== -1) {
+      processedTitle = title.substring(0, groupIndex + 1)
+    }
+
+    // 查找"群"前面的阿拉伯数字并+1
+    const numberMatch = processedTitle.match(/(\d+)群/)
+    if (numberMatch) {
+      const currentNumber = parseInt(numberMatch[1])
+      const newNumber = currentNumber + 1
+      processedTitle = processedTitle.replace(/(\d+)群/, `${newNumber}群`)
+    }
+
+    return processedTitle
+  }
+
+  /**
+   * 从管理员信息中提取群主名称
+   */
+  private extractAdminName(adminInfo: string): string {
+    const prefix = '群主：'
+    const index = adminInfo.indexOf(prefix)
+
+    if (index !== -1) {
+      return adminInfo.substring(index + prefix.length).trim()
+    }
+
+    return adminInfo.trim()
+  }
+
+  /**
+   * 群码操作之修改新建群聊的通用逻辑
+   * @param page 页面实例
+   * @param groupName 群名称
+   * @param adminName 群主名称
+   * @param enableRetry 是否启用搜索重试机制，默认true
+   * @param maxRetries 最大重试次数，默认5次
+   */
+  private async modifyAndCreateGroupChat(
+    page: puppeteer.Page,
+    groupName: string,
+    adminName: string,
+    enableRetry: boolean = true,
+    maxRetries: number = 5,
+  ): Promise<void> {
+    console.log(`开始群码操作之修改新建群聊: 群名=${groupName}, 群主=${adminName}`)
+
+    // 步骤1: 点击修改按钮
+    console.log('\n=== 步骤1: 点击修改按钮 ===')
+    await this.waitAndClick(
+      page,
+      '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
+      10000,
+      '修改按钮',
+    )
+    await this.wait(1500) // 等待修改菜单展开
+
+    // 步骤2: 点击新建群聊按钮
+    console.log('\n=== 步骤2: 点击新建群聊按钮 ===')
+    await this.waitAndClick(
+      page,
+      '#js_csPlugin_index_create_wrap > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > ul > li:nth-child(1) > a',
+      10000,
+      '新建群聊按钮',
+    )
+    await this.wait(2000) // 等待新建群聊弹框完全加载
+
+    // 等待弹框出现
+    await this.waitForElement(page, '#__dialog__MNDialog__', 10000, '新建群聊弹框')
+
+    // 步骤3: 点击选择群主
+    console.log('\n=== 步骤3: 选择群主 ===')
+    await this.waitAndClick(
+      page,
+      '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > div > a',
+      10000,
+      '选择群主按钮',
+    )
+    await this.wait(3000) // 等待群主选择页面加载
+
+    // 步骤4: 在搜索成员框输入助手名称（可选重试逻辑）
+    console.log('\n=== 步骤4: 搜索助手 ===')
+
+    if (enableRetry) {
+      await this.searchMemberWithRetry(page, adminName, maxRetries)
+    } else {
+      // 直接搜索，无重试
+      await this.waitAndFill(page, '#memberSearchInput', adminName, 10000, '成员搜索框')
+      await this.wait(2000) // 等待搜索结果异步加载
+
+      // 等待搜索结果出现
+      await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
+    }
+
+    // 步骤5: 点击第一个搜索项
+    console.log('\n=== 步骤5: 选择搜索结果 ===')
+    await this.waitAndClick(
+      page,
+      '#searchResult > ul > li > a > span:nth-child(1)',
+      10000,
+      '第一个搜索结果',
+    )
+    await this.wait(1000) // 等待选择状态更新
+
+    // 步骤6: 点击确认按钮
+    console.log('\n=== 步骤6: 确认群主选择 ===')
+    await this.waitAndClick(page, '#footer_submit_btn', 10000, '确认按钮')
+    await this.wait(2500) // 等待返回群创建页面并加载完成
+
+    // 步骤7: 输入群名称
+    console.log('\n=== 步骤7: 设置群名称 ===')
+    console.log(`群名称: ${groupName}`)
+
+    await this.waitAndFill(
+      page,
+      '#__dialog__MNDialog__ > div > div:nth-child(2) > div > form > div > input',
+      groupName,
+      10000,
+      '群名称输入框',
+    )
+    await this.wait(1000) // 等待群名称输入完成并验证
+
+    // 步骤8: 点击群名称确认按钮
+    console.log('\n=== 步骤8: 确认群名称设置 ===')
+    await this.waitAndClick(
+      page,
+      '#__dialog__MNDialog__ > div > div.qui_dialog_foot.ww_dialog_foot > a.qui_btn.ww_btn.ww_btn_Blue',
+      10000,
+      '群名称确认按钮',
+    )
+    await this.wait(3000) // 等待群名称确认并返回主配置页面
+
+    console.log('✅ 群码操作之修改新建群聊完成')
+  }
+
+  /**
+   * 搜索成员的重试逻辑
+   * @param page 页面实例
+   * @param memberName 成员名称
+   * @param maxRetries 最大重试次数
+   */
+  private async searchMemberWithRetry(
+    page: puppeteer.Page,
+    memberName: string,
+    maxRetries: number = 5,
+  ): Promise<void> {
+    let searchSuccess = false
+    const retryDelay = 5000 // 5秒间隔
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 第${attempt}/${maxRetries}次尝试搜索成员: ${memberName}`)
+
+        // 输入成员名称
+        await this.waitAndFill(page, '#memberSearchInput', memberName, 10000, '成员搜索框')
+        await this.wait(2000) // 等待搜索结果异步加载
+
+        // 等待搜索结果出现
+        await this.waitForElement(page, '#searchResult', 10000, '搜索结果')
+
+        // 检查是否有搜索结果
+        const hasResults = await page.evaluate(() => {
+          const searchResult = document.querySelector('#searchResult')
+          return searchResult && searchResult.children.length > 0
+        })
+
+        if (hasResults) {
+          console.log(`✅ 第${attempt}次尝试成功找到成员`)
+          searchSuccess = true
+          break
+        } else {
+          throw new Error('搜索结果为空')
+        }
+      } catch (error) {
+        console.warn(
+          `⚠️ 第${attempt}次搜索成员失败:`,
+          error instanceof Error ? error.message : '未知错误',
+        )
+
+        if (attempt < maxRetries) {
+          console.log(`⏳ ${retryDelay / 1000}秒后进行第${attempt + 1}次重试...`)
+          await this.wait(retryDelay)
+
+          // 清空输入框准备重试
+          try {
+            await this.waitAndFill(page, '#memberSearchInput', '', 5000, '清空成员搜索框')
+            await page.keyboard.press('Enter')
+            await this.wait(2000)
+          } catch (clearError) {
+            console.warn('清空输入框失败:', clearError)
+          }
+        }
+      }
+    }
+
+    if (!searchSuccess) {
+      throw new Error(
+        `搜索成员失败: 已重试${maxRetries}次仍无法找到成员"${memberName}"，请检查成员名称是否正确`,
+      )
+    }
+  }
+
+  /**
+   * 添加新群聊（兼容旧接口）
+   */
+  private async addNewGroupChat(
+    page: puppeteer.Page,
+    groupName: string,
+    adminName: string,
+  ): Promise<void> {
+    console.log('开始添加新群聊...')
+
+    // 1. 点击添加按钮
+    await this.waitAndClick(page, '.ww_groupSelBtn_add', 10000, '添加按钮')
+
+    // 2. 等待下拉菜单
+    await this.waitForElement(
+      page,
+      '.qui_dropdownMenu_itemLink.ww_dropdownMenu_itemLink',
+      5000,
+      '下拉菜单',
+    )
+
+    // 3. 点击新建群聊
+    const newGroupOption = await page.$('.qui_dropdownMenu_itemLink.ww_dropdownMenu_itemLink')
+    if (newGroupOption) {
+      const optionText = await page.evaluate(
+        (el) => (el as HTMLElement).innerText || el.textContent,
+        newGroupOption,
+      )
+      if (optionText && optionText.includes('新建群聊')) {
+        await newGroupOption.click()
+        console.log('点击新建群聊选项')
+      }
+      await newGroupOption.dispose()
+    }
+
+    // 4. 等待新建群聊页面
+    await this.waitForElement(page, '#memberSearchInput', 10000, '成员搜索框')
+
+    // 5. 选择群主
+    await this.selectGroupOwner(page, adminName)
+
+    // 6. 设置群名称
+    await this.setGroupName(page, groupName)
+
+    console.log('新群聊添加完成')
+  }
+
+  /**
+   * 选择群主
+   */
+  private async selectGroupOwner(page: puppeteer.Page, adminName: string): Promise<void> {
+    console.log(`搜索并选择群主: ${adminName}`)
+
+    // 搜索群主
+    await this.waitAndFill(page, '#memberSearchInput', adminName, 10000, '成员搜索框')
+    await this.wait(2000)
+
+    // 等待搜索结果
+    await this.waitForElement(page, '.ww_searchResult_title_peopleName', 10000, '搜索结果')
+
+    // 点击第一个搜索结果
+    await this.waitAndClick(page, '.ww_searchResult_title_peopleName', 10000, '搜索结果中的人名')
+    await this.wait(1000)
+
+    // 点击确认按钮
+    await this.waitAndClick(page, '.qui_btn.ww_btn.ww_btn_Blue.js_submit', 10000, '确认按钮')
+    await this.wait(2000)
+  }
+
+  /**
+   * 设置群名称
+   */
+  private async setGroupName(page: puppeteer.Page, groupName: string): Promise<void> {
+    console.log(`设置群名称: ${groupName}`)
+
+    // 等待回到群聊创建页面
+    await this.waitForElement(
+      page,
+      '.qui_inputText.ww_inputText.ww_inputText_Big.js_chatGroup_name',
+      10000,
+      '群名称输入框',
+    )
+
+    // 填写群名称
+    await this.waitAndFill(
+      page,
+      '.qui_inputText.ww_inputText.ww_inputText_Big.js_chatGroup_name',
+      groupName,
+      10000,
+      '群名称输入框',
+    )
+
+    await this.wait(1000)
+
+    // 点击确认按钮
+    await this.waitAndClick(
+      page,
+      '.qui_dialog_foot .qui_btn.ww_btn.ww_btn_Blue[d_ck="submit"]',
+      10000,
+      '确认按钮',
+    )
+
+    await this.wait(2000)
+  }
+
+  /**
+   * 处理单个插件的所有操作
+   * @param page 页面实例
+   * @param pluginId 插件ID
+   * @param operations 操作记录数组
+   */
+  private async processPluginOperations(
+    page: puppeteer.Page,
+    pluginId: string,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    try {
+      console.log(`开始处理插件 ${pluginId}`)
+
+      // 1. 跳转到插件编辑页面
+      const editUrl = `https://work.weixin.qq.com/wework_admin/frame#chatGroup/edit/${pluginId}`
+      console.log(`跳转到插件编辑页面: ${editUrl}`)
+
+      await page.goto(editUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+      await this.wait(3000) // 等待页面完全加载
+
+      // 2. 执行删除操作
+      const deleteResult = await this.deleteGroupsFromPlugin(page, operations)
+
+      // 3. 如果需要，执行新建群组操作（传入原始操作记录和删除结果）
+      const addResult = await this.addGroupsToPlugin(page, operations)
+
+      // 4. 保存插件变更
+      await this.savePluginChanges(page)
+
+      // 5. 合并操作结果
+      const allRecords = [...deleteResult.records, ...addResult.records]
+      const totalProcessed = deleteResult.processed + addResult.processed
+      const totalSuccess = deleteResult.success + addResult.success
+      const totalFailures = deleteResult.failures + addResult.failures
+
+      console.log(
+        `插件 ${pluginId} 处理完成: 总计 ${totalProcessed}, 成功 ${totalSuccess}, 失败 ${totalFailures}`,
+      )
+
+      return {
+        processed: totalProcessed,
+        success: totalSuccess,
+        failures: totalFailures,
+        records: allRecords,
+      }
+    } catch (error) {
+      console.error(`处理插件 ${pluginId} 时发生错误:`, error)
+
+      // 将所有操作标记为失败
+      const failedRecords = operations.map((op) => ({
+        ...op,
+        success: false,
+        error: error instanceof Error ? error.message : '插件处理失败',
+      }))
+
+      return {
+        processed: operations.length,
+        success: 0,
+        failures: operations.length,
+        records: failedRecords,
+      }
+    }
+  }
+
+  /**
+   * 从插件中删除指定的群组
+   * @param page 页面实例
+   * @param operations 操作记录数组
+   */
+  private async deleteGroupsFromPlugin(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    const groupsToDelete = operations.filter(
+      (op) =>
+        op.operationType === GroupOperationType.DELETE_BY_KEYWORD ||
+        op.operationType === GroupOperationType.DELETE_BY_MEMBER_COUNT,
+    )
+
+    if (groupsToDelete.length === 0) {
+      console.log('无需删除的群组')
+      return {
+        processed: 0,
+        success: 0,
+        failures: 0,
+        records: [],
+      }
+    }
+
+    const groupContainer =
+      '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(1) > div.csPlugin_mod_item_content > div.csPlugin_mod_chatGroups.js_chatGroup_groupList'
+
+    console.log(`开始删除 ${groupsToDelete.length} 个群组`)
+
+    const results: GroupOperationRecord[] = []
+    let successCount = 0
+    let failureCount = 0
+
+    // 等待群组容器加载
+    try {
+      await this.waitForElement(page, groupContainer, 10000, '群组容器')
+    } catch (error) {
+      console.error('群组容器加载失败:', error)
+
+      // 所有删除操作都失败
+      return {
+        processed: groupsToDelete.length,
+        success: 0,
+        failures: groupsToDelete.length,
+        records: groupsToDelete.map((op) => ({
+          ...op,
+          success: false,
+          error: '群组容器加载失败',
+        })),
+      }
+    }
+
+    for (const operation of groupsToDelete) {
+      const { groupInfo } = operation
+      const { roomId, title } = groupInfo
+
+      try {
+        console.log(`删除群组: ${title} (roomId: ${roomId})`)
+
+        if (!roomId) {
+          throw new Error('缺少群组roomId')
+        }
+
+        // 构建选择器：在群组容器中查找具有指定data-roomid的元素，然后找删除按钮
+        const deleteButtonSelector = `${groupContainer} > div[data-roomid="${roomId}"] > i`
+
+        // 复用base中的waitAndClick方法
+        await this.waitAndClick(page, deleteButtonSelector, 10000, `群组 ${title} 删除按钮`)
+
+        // 等待删除操作完成
+        await this.wait(1000)
+
+        // 复用base中的方法验证群组是否已被删除
+        const isDeleted = await this.waitForSelectorDisappear(page, deleteButtonSelector, 2000)
+        if (isDeleted) {
+          console.log(`✓ 群组 ${title} 删除成功`)
+        } else {
+          console.warn(`群组 ${title} 可能未完全删除`)
+        }
+
+        results.push({
+          ...operation,
+          success: true,
+        })
+        successCount++
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '删除失败'
+        console.error(`删除群组 ${title} 失败:`, errorMessage)
+
+        results.push({
+          ...operation,
+          success: false,
+          error: errorMessage,
+        })
+        failureCount++
+      }
+    }
+
+    console.log(`群组删除完成: 成功 ${successCount}, 失败 ${failureCount}`)
+
+    return {
+      processed: groupsToDelete.length,
+      success: successCount,
+      failures: failureCount,
+      records: results,
+    }
+  }
+
+  /**
+   * 向插件添加新群组（根据创建操作）
+   * @param page 页面实例
+   * @param operations 操作记录数组
+   */
+  private async addGroupsToPlugin(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    // 找到需要新建群组的操作（CREATE_NEW 类型）
+    const createOperations = operations.filter(
+      (op) => op.operationType === GroupOperationType.CREATE_NEW,
+    )
+
+    if (createOperations.length === 0) {
+      console.log('无需新建群组')
+      return {
+        processed: 0,
+        success: 0,
+        failures: 0,
+        records: [],
+      }
+    }
+
+    console.log(`开始新建群组，创建操作数: ${createOperations.length}`)
+
+    // 由于一个插件只有一个创建操作，直接处理第一个
+    const operation = createOperations[0]
+    const { groupInfo } = operation
+
+    // 从创建操作的groupInfo中获取群名和群主信息
+    const groupTitle = groupInfo.title
+    const adminName = this.extractAdminName(groupInfo.adminInfo)
+
+    console.log(`执行创建操作: 群名 "${groupTitle}", 群主: ${adminName}`)
+
+    try {
+      // 复用现有的新建群聊逻辑
+      await this.modifyAndCreateGroupChat(page, groupTitle, adminName)
+
+      const successRecord: GroupOperationRecord = {
+        groupInfo,
+        operationType: GroupOperationType.CREATE_NEW,
+        reason: `成功新建群组 "${groupTitle}"`,
+        success: true,
+      }
+
+      console.log(`✓ 新群组 "${groupTitle}" 创建成功`)
+
+      return {
+        processed: 1,
+        success: 1,
+        failures: 0,
+        records: [successRecord],
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '新建群组失败'
+      console.error(`新建群组失败:`, errorMessage)
+
+      const failureRecord: GroupOperationRecord = {
+        groupInfo,
+        operationType: GroupOperationType.CREATE_NEW,
+        reason: `新建群组失败: ${errorMessage}`,
+        success: false,
+        error: errorMessage,
+      }
+
+      return {
+        processed: 1,
+        success: 0,
+        failures: 1,
+        records: [failureRecord],
+      }
+    }
+  }
+
+  /**
+   * 保存插件变更
+   * @param page 页面实例
+   */
+  private async savePluginChanges(page: puppeteer.Page): Promise<void> {
+    try {
+      console.log('保存插件变更...')
+
+      // 查找保存按钮（参考现有的保存逻辑）
+      const saveButtonSelectors = [
+        '.csPlugin_mod_item_opt .qui_btn.ww_btn.ww_btn_Blue.js_save_form', // 主要保存按钮选择器
+        '.qui_btn.ww_btn.ww_btn_Blue.js_save_form', // 备用选择器
+        '[class*="js_save_form"]', // 更通用的保存按钮选择器
+        '.ww_btn_Blue', // 最通用的蓝色按钮选择器
+      ]
+
+      let saveSuccess = false
+      let lastError: Error | null = null
+
+      // 尝试不同的保存按钮选择器
+      for (const selector of saveButtonSelectors) {
+        try {
+          console.log(`尝试使用选择器: ${selector}`)
+
+          await this.waitForElement(page, selector, 5000, `保存按钮 (${selector})`)
+          await this.waitAndClick(page, selector, 10000, `保存按钮 (${selector})`)
+
+          saveSuccess = true
+          console.log(`✓ 成功点击保存按钮: ${selector}`)
+          break
+        } catch (error) {
+          console.warn(`保存按钮选择器 ${selector} 失败:`, error)
+          lastError = error instanceof Error ? error : new Error('未知错误')
+          continue
+        }
+      }
+
+      if (!saveSuccess) {
+        throw new Error(`所有保存按钮选择器都失败。最后的错误: ${lastError?.message}`)
+      }
+
+      // 等待保存操作完成
+      console.log('等待保存操作完成...')
+      await this.wait(3000)
+
+      // 检查是否有保存成功的指示
+      try {
+        // 等待页面跳转或确认保存成功
+        await Promise.race([
+          // 等待可能的页面跳转
+          page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => null),
+          // 等待特定的成功提示（如果有）
+          page
+            .waitForSelector('.success, .toast-success, [class*="success"]', { timeout: 5000 })
+            .catch(() => null),
+          // 简单的时间等待作为后备
+          this.wait(5000),
+        ])
+
+        console.log('✓ 插件变更保存完成')
+      } catch (waitError) {
+        console.warn('保存完成检查失败，但保存操作可能已成功:', waitError)
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      console.error('保存插件变更失败:', errorMessage)
+      throw new Error(`保存插件变更失败: ${errorMessage}`)
+    }
+  }
+
+  /**
+   * 获取群聊详细信息
+   * 通过企微API获取群聊的详细数据
+   * @param page 页面实例
+   * @param roomId 群聊房间ID
+   * @returns 群聊详细信息或null
+   */
+  private async getGroupChatDetails(page: puppeteer.Page, roomId: string): Promise<any | null> {
+    try {
+      console.log(`获取群聊详细信息，房间ID: ${roomId}`)
+
+      // 添加1秒内随机等待时间，避免请求过于频繁
+      const randomWaitTime = Math.floor(Math.random() * 1000) // 0-1000毫秒 (0-1秒)
+      console.log(`随机等待 ${randomWaitTime}ms`)
+      await this.wait(randomWaitTime)
+
+      // 生成随机数
+      const random = Math.random()
+
+      // 构建API URL
+      const apiUrl = new URL('https://work.weixin.qq.com/wework_admin/customer/getGroupChatList')
+      apiUrl.searchParams.set('lang', 'zh_CN')
+      apiUrl.searchParams.set('f', 'json')
+      apiUrl.searchParams.set('ajax', '1')
+      apiUrl.searchParams.set('timeZoneInfo[zone_offset]', '-8')
+      apiUrl.searchParams.set('random', random.toString())
+      apiUrl.searchParams.set('roomids[]', roomId)
+
+      console.log(`构建的API URL: ${apiUrl.toString()}`)
+
+      // 使用页面的evaluate方法发送请求，确保cookies被正确携带
+      const response = await page.evaluate(async (url) => {
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            credentials: 'include', // 确保携带cookies
+            headers: {
+              Accept: 'application/json, text/javascript, */*; q=0.01',
+              'X-Requested-With': 'XMLHttpRequest',
+              'User-Agent': navigator.userAgent,
+              Referer: window.location.href,
+            },
+          })
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+
+          const data = await response.json()
+          return { success: true, data }
+        } catch (error: any) {
+          return {
+            success: false,
+            error: error.message || '请求失败',
+          }
+        }
+      }, apiUrl.toString())
+
+      if (!response.success) {
+        console.error(`获取群聊详细信息失败: ${response.error}`)
+        return null
+      }
+
+      const responseData = response.data
+      console.log('API响应数据:', JSON.stringify(responseData, null, 2))
+
+      // 解析响应数据
+      if (responseData && responseData.data && responseData.data.datalist) {
+        const datalist = responseData.data.datalist
+        if (datalist.length > 0) {
+          const groupInfo = datalist[0] // 取第一个群组信息
+          console.log(`✓ 成功获取群聊详细信息: ${groupInfo.roomname || groupInfo.new_room_name}`)
+          return groupInfo
+        }
+      }
+
+      console.warn('API响应中未找到群组数据')
+      return null
+    } catch (error) {
+      console.error('获取群聊详细信息时发生错误:', error)
+      return null
+    }
+  }
 }
 
-;(async function () {
-  const instance = WeworkManager.getInstance()
-  await instance.checkWeWorkLogin()
-  // await instance.changeContactInfo({
-  //   mobile: '13052828856',
-  //   storeType: '店中店',
-  //   storeName: '楠子1店',
-  // })
-  await instance.createGroupLiveCode({
-    storeName: '楠子1店',
-    storeType: '店中店',
-    assistant: '侧耳',
-  })
-  // await instance.forceCloseBrowser()
-})()
+// ;(async function () {
+//   const instance = WeworkManager.getInstance()
+//   await instance.checkWeWorkLogin()
+//   // await instance.changeContactInfo({
+//   //   mobile: '13052828856',
+//   //   storeType: '店中店',
+//   //   storeName: '楠子1店',
+//   // })
+//   // await instance.createGroupLiveCode({
+//   //   storeName: '楠子1店',
+//   //   storeType: '店中店',
+//   //   assistant: '侧耳',
+//   // })
+
+//   // 测试群码替换功能
+//   // await instance.replaceGroupQrCode({
+//   //   searchKeyword: '凡铭', // 空字符串表示搜索HK/DD
+//   // })
+
+//   // await instance.forceCloseBrowser()
+// })()

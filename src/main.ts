@@ -552,6 +552,62 @@ class ElectronApp {
         }
       }
     })
+
+    // 群码替换功能
+    ipcMain.handle('execute-group-replace', async (_, options: any) => {
+      try {
+        console.log('=== 检查企微登录状态 ===')
+        const weworkLoginResult = await this.weworkManager.checkWeWorkLogin()
+
+        console.log('=== 开始执行群码替换任务 ===')
+        console.log('群码替换参数:', options)
+
+        const result = await this.weworkManager.replaceGroupQrCode(options)
+
+        if (result.success) {
+          console.log('群码替换任务完成:', result.message)
+          console.log('处理结果:', result.data)
+        } else {
+          console.error('群码替换任务失败:', result.message)
+        }
+
+        await this.browserInstance.forceCloseBrowser()
+
+        return result
+      } catch (error) {
+        console.error('群码替换任务异常:', error)
+        return {
+          success: false,
+          message: `群码替换任务异常: ${error instanceof Error ? error.message : '未知错误'}`,
+          data: null,
+        }
+      }
+    })
+
+    // 停止群码替换功能
+    ipcMain.handle('stop-group-replace', async () => {
+      try {
+        console.log('=== 收到停止群码替换请求 ===')
+
+        // 强制关闭浏览器实例
+        if (this.browserInstance) {
+          console.log('正在强制关闭浏览器...')
+          await this.browserInstance.forceCloseBrowser()
+          console.log('浏览器已关闭')
+        }
+
+        return {
+          success: true,
+          message: '群码替换已停止，浏览器已关闭',
+        }
+      } catch (error) {
+        console.error('停止群码替换异常:', error)
+        return {
+          success: false,
+          message: `停止群码替换失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
   }
 
   // 发送步骤更新事件到渲染进程

@@ -18,9 +18,11 @@ class RendererApp {
 
   // 标签页元素
   private mainTab!: HTMLButtonElement
+  private groupReplaceTab!: HTMLButtonElement
   private historyTab!: HTMLButtonElement
   private configTab!: HTMLButtonElement
   private mainPanel!: HTMLDivElement
+  private groupReplacePanel!: HTMLDivElement
   private historyPanel!: HTMLDivElement
   private configPanel!: HTMLDivElement
 
@@ -57,6 +59,15 @@ class RendererApp {
   private historyList!: HTMLDivElement
   private noHistoryMessage!: HTMLDivElement
 
+  // 群码替换相关元素
+  private groupReplaceForm!: HTMLFormElement
+  private groupSearchKeywordInput!: HTMLInputElement
+  private executeGroupReplaceBtn!: HTMLButtonElement
+  private stopGroupReplaceBtn!: HTMLButtonElement
+  private groupReplaceLogs!: HTMLDivElement
+  private clearGroupReplaceLogsBtn!: HTMLButtonElement
+  private autoScrollGroupReplaceBtn!: HTMLButtonElement
+
   // 步骤状态管理
   private steps = [
     { id: 1, title: '检查企微登录状态', status: 'pending', message: '等待执行...' },
@@ -73,7 +84,9 @@ class RendererApp {
   }
 
   private isRunning = false
+  private isGroupReplaceRunning = false
   private autoScroll = true
+  private autoScrollGroupReplace = true
 
   constructor() {
     this.initializeElements()
@@ -104,9 +117,11 @@ class RendererApp {
 
     // 标签页元素
     this.mainTab = document.getElementById('mainTab') as HTMLButtonElement
+    this.groupReplaceTab = document.getElementById('groupReplaceTab') as HTMLButtonElement
     this.historyTab = document.getElementById('historyTab') as HTMLButtonElement
     this.configTab = document.getElementById('configTab') as HTMLButtonElement
     this.mainPanel = document.getElementById('mainPanel') as HTMLDivElement
+    this.groupReplacePanel = document.getElementById('groupReplacePanel') as HTMLDivElement
     this.historyPanel = document.getElementById('historyPanel') as HTMLDivElement
     this.configPanel = document.getElementById('configPanel') as HTMLDivElement
 
@@ -139,6 +154,21 @@ class RendererApp {
     this.historyLoading = document.getElementById('historyLoading') as HTMLDivElement
     this.historyList = document.getElementById('historyList') as HTMLDivElement
     this.noHistoryMessage = document.getElementById('noHistoryMessage') as HTMLDivElement
+
+    // 群码替换相关元素
+    this.groupReplaceForm = document.getElementById('groupReplaceForm') as HTMLFormElement
+    this.groupSearchKeywordInput = document.getElementById('groupSearchKeyword') as HTMLInputElement
+    this.executeGroupReplaceBtn = document.getElementById(
+      'executeGroupReplaceBtn',
+    ) as HTMLButtonElement
+    this.stopGroupReplaceBtn = document.getElementById('stopGroupReplaceBtn') as HTMLButtonElement
+    this.groupReplaceLogs = document.getElementById('groupReplaceLogs') as HTMLDivElement
+    this.clearGroupReplaceLogsBtn = document.getElementById(
+      'clearGroupReplaceLogsBtn',
+    ) as HTMLButtonElement
+    this.autoScrollGroupReplaceBtn = document.getElementById(
+      'autoScrollGroupReplaceBtn',
+    ) as HTMLButtonElement
   }
 
   private setupEventListeners(): void {
@@ -147,6 +177,7 @@ class RendererApp {
 
     // 标签页切换
     this.mainTab.addEventListener('click', () => this.switchTab('main'))
+    this.groupReplaceTab.addEventListener('click', () => this.switchTab('groupReplace'))
     this.historyTab.addEventListener('click', () => this.switchTab('history'))
     this.configTab.addEventListener('click', () => this.switchTab('config'))
 
@@ -170,6 +201,20 @@ class RendererApp {
     // 历史任务控制
     this.refreshHistoryBtn.addEventListener('click', () => this.loadTaskHistory())
 
+    // 群码替换控制
+    this.groupReplaceForm.addEventListener('submit', (e) => this.executeGroupReplace(e))
+    this.stopGroupReplaceBtn.addEventListener('click', () => this.stopGroupReplace())
+
+    // 群码替换表单验证
+    this.groupSearchKeywordInput.addEventListener('input', () => this.validateGroupReplaceForm())
+    this.groupSearchKeywordInput.addEventListener('change', () => this.validateGroupReplaceForm())
+
+    // 群码替换日志控制
+    this.clearGroupReplaceLogsBtn.addEventListener('click', () => this.clearGroupReplaceLogs())
+    this.autoScrollGroupReplaceBtn.addEventListener('click', () =>
+      this.toggleAutoScrollGroupReplace(),
+    )
+
     // 二维码文件夹打开 - 统一按钮，根据有哪个二维码来决定打开哪个文件夹
     this.openQrCodeFolderBtn.addEventListener('click', () => {
       const folderPath = this.qrCodePaths.weworkQrPath || this.qrCodePaths.weibanQrPath
@@ -188,12 +233,14 @@ class RendererApp {
     this.setupButtonStateUpdateListener()
   }
 
-  private switchTab(tab: 'main' | 'history' | 'config'): void {
+  private switchTab(tab: 'main' | 'groupReplace' | 'history' | 'config'): void {
     // 清除所有active状态
     this.mainTab.classList.remove('active')
+    this.groupReplaceTab.classList.remove('active')
     this.historyTab.classList.remove('active')
     this.configTab.classList.remove('active')
     this.mainPanel.classList.remove('active')
+    this.groupReplacePanel.classList.remove('active')
     this.historyPanel.classList.remove('active')
     this.configPanel.classList.remove('active')
 
@@ -201,6 +248,10 @@ class RendererApp {
     if (tab === 'main') {
       this.mainTab.classList.add('active')
       this.mainPanel.classList.add('active')
+    } else if (tab === 'groupReplace') {
+      this.groupReplaceTab.classList.add('active')
+      this.groupReplacePanel.classList.add('active')
+      this.initGroupReplaceTab() // 初始化群码替换页面
     } else if (tab === 'history') {
       this.historyTab.classList.add('active')
       this.historyPanel.classList.add('active')
@@ -210,6 +261,39 @@ class RendererApp {
       this.configPanel.classList.add('active')
       this.loadConfig() // 切换到配置页面时重新加载配置
     }
+  }
+
+  private initGroupReplaceTab(): void {
+    // 清除群码替换日志区域的占位符
+    this.clearGroupReplaceLogs()
+    this.addGroupReplaceLog('📝 群码替换功能已准备就绪，请输入搜索关键词后点击开始替换', 'info')
+    // 验证群码替换表单状态
+    this.validateGroupReplaceForm()
+  }
+
+  private validateGroupReplaceForm(): boolean {
+    const searchKeyword = this.groupSearchKeywordInput.value.trim()
+
+    // 关键词验证：必须不为空
+    const isValid = searchKeyword.length > 0
+
+    // 更新执行按钮状态和样式
+    this.executeGroupReplaceBtn.disabled = !isValid || this.isGroupReplaceRunning
+    this.stopGroupReplaceBtn.disabled = !this.isGroupReplaceRunning
+
+    // 更新按钮文本
+    if (this.isGroupReplaceRunning) {
+      this.executeGroupReplaceBtn.querySelector('.btn-text')!.textContent = '执行中...'
+      this.stopGroupReplaceBtn.querySelector('.btn-text')!.textContent = '停止替换'
+    } else if (isValid) {
+      this.executeGroupReplaceBtn.querySelector('.btn-text')!.textContent = '开始群码替换'
+      this.stopGroupReplaceBtn.querySelector('.btn-text')!.textContent = '停止替换'
+    } else {
+      this.executeGroupReplaceBtn.querySelector('.btn-text')!.textContent = '请输入关键词'
+      this.stopGroupReplaceBtn.querySelector('.btn-text')!.textContent = '停止替换'
+    }
+
+    return isValid
   }
 
   private async initializeStoreForm(): Promise<void> {
@@ -351,6 +435,8 @@ class RendererApp {
       config.WEIBAN_DASHBOARD_URL || ''
     ;(document.getElementById('weibanQrCreate') as HTMLInputElement).value =
       config.WEIBAN_QR_CREATE_URL || ''
+    ;(document.getElementById('weworkGroupManagementUrl') as HTMLInputElement).value =
+      config.WEWORK_GROUP_MANAGEMENT_URL || ''
 
     // 消息模板配置
     ;(document.getElementById('weibanWelcomeMsg') as HTMLTextAreaElement).value =
@@ -874,6 +960,14 @@ class RendererApp {
     this.autoScrollBtn.textContent = this.autoScroll ? '自动滚动' : '手动滚动'
   }
 
+  private toggleAutoScrollGroupReplace(): void {
+    this.autoScrollGroupReplace = !this.autoScrollGroupReplace
+    this.autoScrollGroupReplaceBtn.classList.toggle('active', this.autoScrollGroupReplace)
+    this.autoScrollGroupReplaceBtn.textContent = this.autoScrollGroupReplace
+      ? '自动滚动'
+      : '手动滚动'
+  }
+
   private addMainProcessLog(
     message: string,
     level: 'log' | 'error' | 'warn',
@@ -911,6 +1005,43 @@ class RendererApp {
     if (this.autoScroll) {
       this.logsDiv.scrollTop = this.logsDiv.scrollHeight
     }
+  }
+
+  private addGroupReplaceLog(message: string, type: 'info' | 'success' | 'error'): void {
+    // 统一使用主页的日志系统
+    const timestamp = new Date().toLocaleTimeString()
+    const logEntry = document.createElement('div')
+    logEntry.className = `log-entry ${type} group-replace-process`
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-source">[群码替换]</span> <span class="log-message">${message}</span>`
+
+    // 添加到主页日志区域
+    this.logsDiv.appendChild(logEntry)
+    if (this.autoScroll) {
+      this.logsDiv.scrollTop = this.logsDiv.scrollHeight
+    }
+
+    // 同时也在群码替换专用区域显示（移除占位符）
+    const placeholder = this.groupReplaceLogs.querySelector('.log-placeholder')
+    if (placeholder) {
+      placeholder.remove()
+    }
+
+    // 在群码替换区域也显示
+    const groupLogEntry = logEntry.cloneNode(true) as HTMLElement
+    this.groupReplaceLogs.appendChild(groupLogEntry)
+    if (this.autoScrollGroupReplace) {
+      this.groupReplaceLogs.scrollTop = this.groupReplaceLogs.scrollHeight
+    }
+  }
+
+  private clearGroupReplaceLogs(): void {
+    this.groupReplaceLogs.innerHTML = ''
+    // 主进程清空逻辑在这里
+    window.electronAPI.clearLogs().then((result) => {
+      if (result.success) {
+        this.addGroupReplaceLog('日志已清空', 'info')
+      }
+    })
   }
 
   // 历史任务相关方法
@@ -1057,6 +1188,98 @@ class RendererApp {
       }
     } catch (error) {
       this.addLog(`❌ 打开任务文件夹异常: ${error}`, 'error')
+    }
+  }
+
+  // 群码替换相关方法
+
+  private async executeGroupReplace(event: Event): Promise<void> {
+    event.preventDefault()
+
+    try {
+      // 表单验证
+      if (!this.validateGroupReplaceForm()) {
+        this.addGroupReplaceLog('❌ 请输入搜索关键词', 'error')
+        return
+      }
+
+      // 获取表单数据
+      const searchKeyword = this.groupSearchKeywordInput.value.trim()
+
+      const options = {
+        searchKeyword,
+      }
+
+      // 设置运行状态
+      this.isGroupReplaceRunning = true
+      this.validateGroupReplaceForm() // 更新按钮状态
+
+      this.addGroupReplaceLog('🚀 开始执行群码替换任务', 'info')
+      this.addGroupReplaceLog(`🔍 搜索关键词: ${searchKeyword}`, 'info')
+
+      // 调用主进程执行群码替换
+      const result = await window.electronAPI.executeGroupReplace(options)
+
+      if (result.success) {
+        this.addGroupReplaceLog(`✅ 群码替换任务完成: ${result.message}`, 'success')
+
+        // 显示详细结果
+        if (result.data) {
+          this.addGroupReplaceLog(`📊 处理结果统计:`, 'info')
+          this.addGroupReplaceLog(`   - 实际处理: ${result.data.processedCount} 个群组`, 'info')
+          this.addGroupReplaceLog(`   - 成功处理: ${result.data.successCount} 个群组`, 'info')
+          this.addGroupReplaceLog(`   - 失败处理: ${result.data.failureCount} 个群组`, 'error')
+          this.addGroupReplaceLog(`   - 执行耗时: ${result.data.executionTime}ms`, 'info')
+
+          // 显示处理的群组详情
+          if (result.data.operationRecords && result.data.operationRecords.length > 0) {
+            this.addGroupReplaceLog(`📋 处理详情:`, 'info')
+            result.data.operationRecords.forEach((record: any) => {
+              const status = record.success ? '✅' : '❌'
+              this.addGroupReplaceLog(
+                `   ${status} ${record.groupInfo.title} (${record.groupInfo.adminInfo}) - ${record.operationType}`,
+                record.success ? 'success' : 'error',
+              )
+              if (!record.success && record.error) {
+                this.addGroupReplaceLog(`      错误: ${record.error}`, 'error')
+              }
+            })
+          }
+        }
+      } else {
+        this.addGroupReplaceLog(`❌ 群码替换任务失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 群码替换任务异常: ${error}`, 'error')
+    } finally {
+      // 恢复运行状态
+      this.isGroupReplaceRunning = false
+      this.validateGroupReplaceForm() // 重新验证表单以更新按钮状态
+    }
+  }
+
+  private async stopGroupReplace(): Promise<void> {
+    this.addGroupReplaceLog('⏹ 用户请求停止群码替换任务', 'info')
+
+    try {
+      // 禁用停止按钮防止重复点击
+      this.stopGroupReplaceBtn.disabled = true
+      this.stopGroupReplaceBtn.querySelector('.btn-text')!.textContent = '停止中...'
+
+      // 调用主进程停止群码替换
+      const result = await window.electronAPI.stopGroupReplace()
+
+      if (result.success) {
+        this.addGroupReplaceLog(`✅ ${result.message}`, 'success')
+      } else {
+        this.addGroupReplaceLog(`❌ ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 停止群码替换异常: ${error}`, 'error')
+    } finally {
+      // 恢复运行状态
+      this.isGroupReplaceRunning = false
+      this.validateGroupReplaceForm() // 重新验证表单以更新按钮状态
     }
   }
 }

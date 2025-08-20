@@ -258,6 +258,7 @@ export class BaseManager {
   ): Promise<void> {
     try {
       console.log(`等待并点击${description ? ` ${description}` : ''}元素: ${selector}`)
+
       await page.locator(selector).setTimeout(timeout).click()
       console.log(`✓ 成功点击${description ? ` ${description}` : ''}元素`)
       await this.wait(500) // 短暂等待确保操作生效
@@ -308,6 +309,7 @@ export class BaseManager {
       console.log(
         `等待并填充${description ? ` ${description}` : ''}输入框: ${selector} = "${value}"`,
       )
+
       const locator = page.locator(selector).setTimeout(timeout)
       await locator.fill(value)
       console.log(`✓ 成功填充${description ? ` ${description}` : ''}输入框`)

@@ -20,6 +20,10 @@ export interface AppConfig {
   WEIBAN_DASHBOARD_URL: string
   WEIBAN_QR_CREATE_URL: string
 
+  // 群码替换配置
+  WEWORK_GROUP_MANAGEMENT_URL: string
+  WEWORK_GROUP_MEMBER_DELETE_THRESHOLD: number
+
   // 消息模板配置
   WEIBAN_WELCOME_MSG: string
   WEIBAN_WELCOME_MSG_INDEPENDENT: string
@@ -65,6 +69,10 @@ export class ConfigManager {
       WEIBAN_DASHBOARD_URL: 'https://weibanzhushou.com/dashboard',
       WEIBAN_QR_CREATE_URL:
         'https://weibanzhushou.com/dashboard/qr/create?isQr=1&groupId=101380218',
+
+      // 群码替换配置
+      WEWORK_GROUP_MANAGEMENT_URL: 'https://work.weixin.qq.com/wework_admin/frame#chatGroup',
+      WEWORK_GROUP_MEMBER_DELETE_THRESHOLD: 100,
 
       // 消息模板配置
       WEIBAN_WELCOME_MSG: '欢迎来到{{storeName}}，为您提供优质的产品和服务。',
@@ -216,6 +224,12 @@ export class ConfigManager {
       lines.push(`WEIBAN_DASHBOARD_URL=${config.WEIBAN_DASHBOARD_URL}`)
       lines.push('# 微伴渠道活码创建')
       lines.push(`WEIBAN_QR_CREATE_URL=${config.WEIBAN_QR_CREATE_URL}`)
+      lines.push('# 企业微信群聊管理')
+      lines.push(`WEWORK_GROUP_MANAGEMENT_URL=${config.WEWORK_GROUP_MANAGEMENT_URL}`)
+      lines.push('# 群码替换中删除群聊的成员数量阈值')
+      lines.push(
+        `WEWORK_GROUP_MEMBER_DELETE_THRESHOLD=${config.WEWORK_GROUP_MEMBER_DELETE_THRESHOLD}`,
+      )
       lines.push('')
 
       // 消息模板配置

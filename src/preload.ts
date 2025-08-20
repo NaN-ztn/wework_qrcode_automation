@@ -40,6 +40,10 @@ interface ElectronAPI {
   getLogs: () => Promise<{ success: boolean; data?: string[] }>
   clearLogs: () => Promise<{ success: boolean; message?: string }>
   getTaskHistory: () => Promise<{ success: boolean; data?: any[]; message?: string }>
+  executeGroupReplace: (options: {
+    searchKeyword?: string
+  }) => Promise<{ success: boolean; message: string; data?: any }>
+  stopGroupReplace: () => Promise<{ success: boolean; message: string }>
 }
 
 const electronAPI: ElectronAPI = {
@@ -70,6 +74,8 @@ const electronAPI: ElectronAPI = {
   getLogs: () => ipcRenderer.invoke('get-logs'),
   clearLogs: () => ipcRenderer.invoke('clear-logs'),
   getTaskHistory: () => ipcRenderer.invoke('get-task-history'),
+  executeGroupReplace: (options) => ipcRenderer.invoke('execute-group-replace', options),
+  stopGroupReplace: () => ipcRenderer.invoke('stop-group-replace'),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
