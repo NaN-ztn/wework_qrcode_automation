@@ -274,12 +274,12 @@ export class WeibanManager extends BaseManager {
         const tagGroupInputSelector =
           '#operator-tag-group-dialog > div.scroll-view > div.tag-group > span > input'
         await this.waitAndFill(page, tagGroupInputSelector, qrCodeName, 15000, '标签组输入框')
-        await this.wait(1000)
+        await this.wait(3000)
 
         // 在标签输入框输入标签名
         const tagInputSelector =
           '#operator-tag-group-dialog > div.scroll-view > div.tag-list-wrap > ul > li > div > span > input'
-        await this.waitAndFill(page, tagInputSelector, tagName, 15000, '标签输入框')
+        await this.waitAndFill(page, tagInputSelector, tagName, 30000, '标签输入框')
         await this.wait(1000)
 
         // 点击标签组确认按钮
