@@ -66,6 +66,7 @@ export class BrowserInstance {
         headless: false,
         userDataDir: this.userDataDir,
         executablePath: chromePath, // 强制使用项目中的Chrome
+        ignoreDefaultArgs: ['--enable-automation'],
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

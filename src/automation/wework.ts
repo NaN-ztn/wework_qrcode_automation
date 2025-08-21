@@ -2092,24 +2092,24 @@ export class WeworkManager extends BaseManager {
   }
 }
 
-;(async function () {
-  const instance = WeworkManager.getInstance()
-  await instance.checkWeWorkLogin()
-  // await instance.changeContactInfo({
-  //   mobile: '13052828856',
-  //   storeType: '店中店',
-  //   storeName: '楠子1店',
-  // })
-  // await instance.createGroupLiveCode({
-  //   storeName: '楠子1店',
-  //   storeType: '店中店',
-  //   assistant: '侧耳',
-  // })
+// ;(async function () {
+//   const instance = WeworkManager.getInstance()
+//   await instance.checkWeWorkLogin()
+//   // await instance.changeContactInfo({
+//   //   mobile: '13052828856',
+//   //   storeType: '店中店',
+//   //   storeName: '楠子1店',
+//   // })
+//   // await instance.createGroupLiveCode({
+//   //   storeName: '楠子1店',
+//   //   storeType: '店中店',
+//   //   assistant: '侧耳',
+//   // })
 
-  // 测试群码替换功能
-  // await instance.replaceGroupQrCode({
-  //   searchKeyword: '凡铭', // 空字符串表示搜索HK/DD
-  // })
+//   // 测试群码替换功能
+//   // await instance.replaceGroupQrCode({
+//   //   searchKeyword: '凡铭', // 空字符串表示搜索HK/DD
+//   // })
 
-  // await instance.forceCloseBrowser()
-})()
+//   // await instance.forceCloseBrowser()
+// })()
