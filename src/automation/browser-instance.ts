@@ -78,6 +78,23 @@ export class BrowserInstance {
           '--disable-infobars',
           '--disable-blink-features=AutomationControlled',
           '--disable-features=TranslateUI,VizDisplayCompositor,HttpsFirstBalancedModeAutoEnable',
+          // 隐藏Chrome自动化控制提示栏（重要参数）
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-default-apps',
+          '--disable-extensions-except=',
+          '--disable-component-extensions-with-background-pages',
+          '--enable-automation=false',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-ipc-flooding-protection',
+          // 专门针对自动化提示栏的参数
+          '--exclude-switches=enable-automation',
+          '--disable-blink-features=AutomationControlled',
+          '--no-first-run',
+          '--no-service-autorun',
+          '--password-store=basic',
+          '--use-mock-keychain',
           '--disable-component-extensions-with-background-pages',
           '--disable-hang-monitor',
           '--disable-prompt-on-repost',
@@ -155,6 +172,29 @@ export class BrowserInstance {
   public async createPage(): Promise<puppeteer.Page> {
     const browser = await this.getBrowser()
     const page = await browser.newPage()
+
+    // 隐藏自动化标识，让页面表现得像正常浏览器
+    await page.evaluateOnNewDocument(() => {
+      // 删除 webdriver 标识
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      })
+
+      // 删除自动化相关的 window 属性
+      delete (window as any).cdc_adoQpoasnfa76pfcZLmcfl_Array
+      delete (window as any).cdc_adoQpoasnfa76pfcZLmcfl_Promise
+      delete (window as any).cdc_adoQpoasnfa76pfcZLmcfl_Symbol
+
+      // 重写 plugins 长度
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      })
+
+      // 重写 languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['zh-CN', 'zh', 'en'],
+      })
+    })
 
     // 使用setViewport自适应显示器尺寸
     try {
