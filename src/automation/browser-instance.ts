@@ -74,8 +74,16 @@ export class BrowserInstance {
           '--disable-default-apps',
           '--disable-sync',
           '--disable-translate',
+          // 禁用现代版本的信息栏和测试模式提示
           '--disable-infobars',
-          '--disable-features=TranslateUI',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-features=TranslateUI,VizDisplayCompositor,HttpsFirstBalancedModeAutoEnable',
+          '--disable-component-extensions-with-background-pages',
+          '--disable-hang-monitor',
+          '--disable-prompt-on-repost',
+          '--disable-domain-reliability',
+          '--disable-client-side-phishing-detection',
+          '--disable-component-update',
           '--disable-ipc-flooding-protection',
           '--enable-features=NetworkService',
           '--disable-background-timer-throttling',
@@ -84,6 +92,13 @@ export class BrowserInstance {
           '--keep-alive-for-test',
           '--no-first-run',
           '--no-default-browser-check',
+          '--no-pings',
+          '--no-zygote',
+          // 禁用可能影响页面布局的特性
+          '--disable-features=Translate,OptimizationHints,MediaRouter,CalculateNativeWinOcclusion,CertificateTransparencyComponentUpdater',
+          '--disable-backgrounding-occluded-window',
+          '--disable-software-rasterizer',
+          '--disable-background-downloads',
           // 内存和性能优化参数
           '--memory-pressure-off',
           '--max_old_space_size=4096',
@@ -93,14 +108,15 @@ export class BrowserInstance {
           '--disable-java',
           '--disable-notifications',
           '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
+          '--disable-popup-blocking',
           // GPU和渲染优化
           '--use-gl=desktop',
           '--ignore-gpu-blacklist',
           '--disable-gpu-sandbox',
           '--enable-accelerated-2d-canvas',
           '--enable-gpu-rasterization',
-          '--disable-features=VizDisplayCompositor',
+          // 禁用各种可能导致UI变化的功能
+          '--disable-features=VizDisplayCompositor,ChromeWhatsNewUI,AutofillEnableAccountWalletStorage',
         ],
       }
 
@@ -156,10 +172,11 @@ export class BrowserInstance {
       console.log('📱 屏幕信息:', screenInfo)
 
       // 使用Puppeteer的setViewport API自适应屏幕
-      // 使用屏幕可用区域尺寸确保最大化利用屏幕空间
+      // 减少高度以避免Chrome信息栏影响滚动
+      const adjustedHeight = Math.max(screenInfo.availHeight - 100, 600) // 预留100px防止信息栏干扰
       await page.setViewport({
         width: screenInfo.availWidth, // 使用屏幕可用宽度
-        height: screenInfo.availHeight, // 使用屏幕可用高度
+        height: adjustedHeight, // 调整高度避免信息栏影响
         deviceScaleFactor: screenInfo.devicePixelRatio, // 自适应设备缩放
         hasTouch: false,
         isMobile: false,

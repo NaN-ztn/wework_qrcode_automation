@@ -1057,6 +1057,19 @@ export class WeworkManager extends BaseManager {
       console.log(`正在收集第 ${currentPage} 页数据...`)
 
       try {
+        // 检查浏览器是否已关闭
+        const browser = page.browser()
+        if (!browser.connected) {
+          console.log('浏览器已关闭，停止收集群组数据')
+          break
+        }
+
+        // 检查页面是否已关闭
+        if (page.isClosed()) {
+          console.log('页面已关闭，停止收集群组数据')
+          break
+        }
+
         // 先设置Promise监听，再执行查询操作
         const apiResponsePromise = this.waitForApiResponse<any>(
           page,
@@ -1080,7 +1093,19 @@ export class WeworkManager extends BaseManager {
           break
         }
       } catch (error) {
-        console.warn(`第 ${currentPage} 页API响应失败:`, error)
+        // 检查是否是页面已关闭相关的错误
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (
+          errorMessage.includes('Target closed') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Connection closed') ||
+          errorMessage.includes('Protocol error')
+        ) {
+          console.log('检测到页面或浏览器已关闭，停止收集群组数据')
+          break
+        }
+
+        console.warn(`第 ${currentPage} 页API响应失败:`, errorMessage)
         break
       }
 
@@ -1469,6 +1494,19 @@ export class WeworkManager extends BaseManager {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        // 检查浏览器是否已关闭
+        const browser = page.browser()
+        if (!browser.connected) {
+          console.log('浏览器已关闭，停止搜索成员')
+          return
+        }
+
+        // 检查页面是否已关闭
+        if (page.isClosed()) {
+          console.log('页面已关闭，停止搜索成员')
+          return
+        }
+
         console.log(`🔄 第${attempt}/${maxRetries}次尝试搜索成员: ${memberName}`)
 
         // 输入成员名称
@@ -1492,10 +1530,19 @@ export class WeworkManager extends BaseManager {
           throw new Error('搜索结果为空')
         }
       } catch (error) {
-        console.warn(
-          `⚠️ 第${attempt}次搜索成员失败:`,
-          error instanceof Error ? error.message : '未知错误',
-        )
+        // 检查是否是页面已关闭相关的错误
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (
+          errorMessage.includes('Target closed') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Connection closed') ||
+          errorMessage.includes('Protocol error')
+        ) {
+          console.log('检测到页面或浏览器已关闭，停止搜索成员')
+          return
+        }
+
+        console.warn(`⚠️ 第${attempt}次搜索成员失败:`, errorMessage)
 
         if (attempt < maxRetries) {
           console.log(`⏳ ${retryDelay / 1000}秒后进行第${attempt + 1}次重试...`)

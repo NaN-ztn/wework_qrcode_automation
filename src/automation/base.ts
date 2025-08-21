@@ -94,6 +94,19 @@ export class BaseManager {
 
     while (Date.now() - startTime < timeout) {
       try {
+        // 检查浏览器是否已关闭
+        const browser = page.browser()
+        if (!browser.connected) {
+          console.log('浏览器已关闭，停止轮询检测')
+          return false
+        }
+
+        // 检查页面是否已关闭
+        if (page.isClosed()) {
+          console.log('页面已关闭，停止轮询检测')
+          return false
+        }
+
         const currentUrl = page.url()
         const isTargetPage = strict ? currentUrl === targetUrl : currentUrl.includes(targetUrl)
 
@@ -105,7 +118,19 @@ export class BaseManager {
         console.log(`当前页面: ${currentUrl}, 继续等待目标页面: ${targetUrl}`)
         await this.wait(interval)
       } catch (error) {
-        console.warn('轮询检测页面时出错:', error)
+        // 检查是否是页面已关闭相关的错误
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (
+          errorMessage.includes('Target closed') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Connection closed') ||
+          errorMessage.includes('Protocol error')
+        ) {
+          console.log('检测到页面或浏览器已关闭，停止轮询检测')
+          return false
+        }
+
+        console.warn('轮询检测页面时出错:', errorMessage)
         await this.wait(interval)
       }
     }
@@ -361,6 +386,19 @@ export class BaseManager {
 
     while (Date.now() - startTime < timeout) {
       try {
+        // 检查浏览器是否已关闭
+        const browser = page.browser()
+        if (!browser.connected) {
+          console.log('浏览器已关闭，停止查找元素')
+          return null
+        }
+
+        // 检查页面是否已关闭
+        if (page.isClosed()) {
+          console.log('页面已关闭，停止查找元素')
+          return null
+        }
+
         console.log(`查找包含文本 "${searchText}" 的元素...`)
 
         // 等待容器出现
@@ -390,7 +428,19 @@ export class BaseManager {
         console.log(`未找到包含 "${searchText}" 的元素，等待1秒后重试...`)
         await this.wait(1000)
       } catch (error) {
-        console.warn('查找元素过程中出错:', error)
+        // 检查是否是页面已关闭相关的错误
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (
+          errorMessage.includes('Target closed') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Connection closed') ||
+          errorMessage.includes('Protocol error')
+        ) {
+          console.log('检测到页面或浏览器已关闭，停止查找元素')
+          return null
+        }
+
+        console.warn('查找元素过程中出错:', errorMessage)
         await this.wait(1000)
       }
     }
