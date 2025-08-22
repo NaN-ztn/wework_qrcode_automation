@@ -85,7 +85,6 @@ export class BrowserInstance {
           '--disable-default-apps',
           '--disable-extensions-except=',
           '--disable-component-extensions-with-background-pages',
-          '--enable-automation=false',
           '--disable-web-security',
           '--disable-features=VizDisplayCompositor',
           '--disable-ipc-flooding-protection',
