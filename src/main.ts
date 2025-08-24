@@ -5,6 +5,7 @@ import { ConfigManager, AppConfig } from './utils/config-manager'
 import { WeworkManager } from './automation/wework'
 import { WeibanManager } from './automation/weiban'
 import { BrowserInstance } from './automation/browser-instance'
+import { TodoListManager } from './utils/todo-list-manager'
 
 class ElectronApp {
   private mainWindow: BrowserWindow | null = null
@@ -33,6 +34,23 @@ class ElectronApp {
       const message = args
         .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)))
         .join(' ')
+
+      // 检查是否是插件状态更新的特殊日志消息
+      if (message.includes('🔄 PLUGIN_STATUS_UPDATE:')) {
+        try {
+          const updateMatch = message.match(/🔄 PLUGIN_STATUS_UPDATE: (\S+) (\S+) (\S+)/)
+          if (updateMatch) {
+            const [, todoListId, pluginId, status] = updateMatch
+            // 使用原始console.log避免递归调用
+            originalLog(`📤 检测到状态更新消息，发送事件: ${pluginId} -> ${status}`)
+            this.sendPluginStatusUpdate(pluginId, todoListId, status)
+          }
+        } catch (e) {
+          // 使用原始console.error避免递归调用
+          originalError('解析状态更新消息失败:', e)
+        }
+      }
+
       const logEntry = `[LOG] ${new Date().toLocaleTimeString()} ${message}`
       this.logs.push(logEntry)
       this.sendLogToRenderer('log', message)
@@ -203,6 +221,10 @@ class ElectronApp {
         },
       ) => {
         try {
+          // 重置停止标志，允许新任务执行
+          this.weworkManager.resetStopFlag()
+          console.log('🔄 已重置停止标志，准备执行主页任务')
+
           const qrCodePaths = {
             weworkQrPath: '',
             weibanQrPath: '',
@@ -394,6 +416,12 @@ class ElectronApp {
     // 停止执行
     ipcMain.handle('stop-execution', async () => {
       try {
+        console.log('=== 收到停止主页任务请求 ===')
+        // 请求WeworkManager停止执行
+        this.weworkManager.requestStop()
+        console.log('已向WeworkManager发送停止请求')
+
+        // 强制关闭浏览器实例
         await this.browserInstance.forceCloseBrowser()
         return {
           success: true,
@@ -553,23 +581,231 @@ class ElectronApp {
       }
     })
 
-    // 群码替换功能
+    // 生成插件任务列表
+    ipcMain.handle('generate-plugin-tasks', async (_, options: any) => {
+      try {
+        // 重置停止标志，允许新任务生成
+        this.weworkManager.resetStopFlag()
+        console.log('🔄 已重置停止标志，准备生成新任务列表')
+
+        console.log('=== 生成插件任务列表 ===')
+        console.log('任务参数:', options)
+
+        const { searchKeyword = '' } = options
+        const result = await this.weworkManager.generatePluginTaskList(searchKeyword)
+
+        if (result.success && result.data) {
+          console.log('插件任务列表生成完成:', result.message)
+          console.log('生成结果:', result.data)
+
+          // 发送任务列表生成完成事件
+          this.sendPluginTaskGenerated(
+            result.data.todoListId,
+            result.data.pluginCount,
+            result.data.totalOperations,
+          )
+
+          // 发送自动选中通知
+          this.sendTodoListCreated(result.data.todoListId)
+        } else {
+          console.error('插件任务列表生成失败:', result.message)
+        }
+
+        return result
+      } catch (error) {
+        console.error('生成插件任务列表异常:', error)
+        return {
+          success: false,
+          message: `生成插件任务列表异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    // 执行单个插件任务
+    ipcMain.handle('execute-plugin-task', async (_, options: any) => {
+      try {
+        // 首先检查是否已被请求停止
+        if (this.weworkManager.checkStopRequested && this.weworkManager.checkStopRequested()) {
+          console.log('🛑 检测到停止请求，拒绝执行插件任务')
+          return {
+            success: false,
+            message: '用户请求停止，插件任务执行已取消',
+          }
+        }
+
+        console.log('=== 执行单个插件任务 ===')
+        console.log('插件参数:', options)
+
+        const { pluginId, todoListId } = options
+
+        // 发送插件开始执行事件
+        this.sendPluginTaskStarted(pluginId, todoListId)
+
+        console.log(`📤 准备调用executePluginTask: ${pluginId}`)
+        const result = await this.weworkManager.executePluginTask(pluginId, todoListId)
+
+        console.log(
+          `📥 executePluginTask返回结果 - success: ${result.success}, message: ${result.message}`,
+        )
+
+        if (result.success) {
+          console.log(`✅ 插件 ${pluginId} 执行成功，准备发送完成事件`)
+          console.log('执行结果:', result.data)
+
+          // 发送插件执行完成事件
+          this.sendPluginTaskCompleted(pluginId, todoListId, result.data)
+          console.log(`🚀 已发送plugin-task-completed事件: ${pluginId}`)
+        } else {
+          console.error(`❌ 插件 ${pluginId} 执行失败:`, result.message)
+
+          // 发送插件执行失败事件
+          this.sendPluginTaskFailed(pluginId, todoListId, result.message)
+          console.log(`🚀 已发送plugin-task-failed事件: ${pluginId}`)
+        }
+
+        return result
+      } catch (error) {
+        console.error('执行单个插件任务异常:', error)
+
+        // 发送插件执行失败事件
+        const { pluginId, todoListId } = options
+        this.sendPluginTaskFailed(
+          pluginId,
+          todoListId,
+          error instanceof Error ? error.message : '未知错误',
+        )
+
+        return {
+          success: false,
+          message: `执行单个插件任务异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    // 群码替换功能（重构为分阶段执行）
     ipcMain.handle('execute-group-replace', async (_, options: any) => {
       try {
+        // 重置停止标志，允许新任务执行
+        this.weworkManager.resetStopFlag()
+        console.log('🔄 已重置停止标志，准备执行新任务')
+
         console.log('=== 检查企微登录状态 ===')
         const weworkLoginResult = await this.weworkManager.checkWeWorkLogin()
 
-        console.log('=== 开始执行群码替换任务 ===')
+        console.log('=== 开始执行群码替换任务（分阶段模式） ===')
         console.log('群码替换参数:', options)
 
-        const result = await this.weworkManager.replaceGroupQrCode(options)
+        const { searchKeyword = '' } = options
 
-        if (result.success) {
-          console.log('群码替换任务完成:', result.message)
-          console.log('处理结果:', result.data)
-        } else {
-          console.error('群码替换任务失败:', result.message)
+        // 阶段1: 生成插件任务列表
+        console.log('\n=== 阶段1: 生成插件任务列表 ===')
+        const generateResult = await this.weworkManager.generatePluginTaskList(searchKeyword)
+
+        if (!generateResult.success) {
+          console.error('生成插件任务列表失败:', generateResult.message)
+          return generateResult
         }
+
+        const { todoListId, pluginCount, totalOperations } = generateResult.data!
+        console.log(`任务列表生成成功: ${pluginCount} 个插件，共 ${totalOperations} 个操作`)
+
+        // 发送任务列表生成完成事件
+        this.sendPluginTaskGenerated(todoListId, pluginCount, totalOperations)
+        // 发送自动选中通知
+        this.sendTodoListCreated(todoListId)
+
+        // 阶段2: 逐个执行插件任务
+        console.log('\n=== 阶段2: 执行插件任务 ===')
+
+        const todoListManager = TodoListManager.getInstance()
+        const todoList = await todoListManager.loadTodoList(todoListId)
+
+        if (!todoList) {
+          return {
+            success: false,
+            message: `TodoList不存在: ${todoListId}`,
+          }
+        }
+
+        const operationRecords: any[] = []
+        let processedCount = 0
+        let successCount = 0
+        let failureCount = 0
+
+        // 遍历每个插件并执行
+        for (const pluginItem of todoList.items) {
+          // 检查是否请求停止
+          if (this.weworkManager.checkStopRequested && this.weworkManager.checkStopRequested()) {
+            console.log('🛑 检测到停止请求，终止群码替换执行')
+            await this.browserInstance.forceCloseBrowser()
+            return {
+              success: false,
+              message: '用户请求停止，群码替换已中断',
+              data: {
+                searchKeyword,
+                processedCount,
+                successCount,
+                failureCount,
+                todoListId,
+                operationRecords,
+              },
+            }
+          }
+
+          try {
+            // 发送插件开始执行事件
+            this.sendPluginTaskStarted(pluginItem.pluginId, todoListId)
+
+            // 执行单个插件任务
+            const pluginResult = await this.weworkManager.executePluginTask(
+              pluginItem.pluginId,
+              todoListId,
+            )
+
+            if (pluginResult.success && pluginResult.data) {
+              operationRecords.push(...pluginResult.data.operationRecords)
+              processedCount += pluginResult.data.processedCount
+              successCount += pluginResult.data.successCount
+              failureCount += pluginResult.data.failureCount
+
+              // 发送插件执行完成事件
+              this.sendPluginTaskCompleted(pluginItem.pluginId, todoListId, pluginResult.data)
+            } else {
+              // 插件执行失败
+              failureCount += pluginItem.operationRecords?.length || 0
+              console.error(`插件 ${pluginItem.pluginId} 执行失败: ${pluginResult.message}`)
+
+              // 发送插件执行失败事件
+              this.sendPluginTaskFailed(pluginItem.pluginId, todoListId, pluginResult.message)
+            }
+          } catch (error) {
+            console.error(`执行插件 ${pluginItem.pluginId} 异常:`, error)
+            failureCount += pluginItem.operationRecords?.length || 0
+
+            // 发送插件执行失败事件
+            this.sendPluginTaskFailed(
+              pluginItem.pluginId,
+              todoListId,
+              error instanceof Error ? error.message : '未知错误',
+            )
+          }
+        }
+
+        const result = {
+          success: true,
+          message: `群码替换完成，处理 ${processedCount} 个操作，成功 ${successCount} 个，失败 ${failureCount} 个`,
+          data: {
+            searchKeyword,
+            processedCount,
+            successCount,
+            failureCount,
+            todoListId,
+            operationRecords,
+          },
+        }
+
+        console.log('群码替换任务完成:', result.message)
+        console.log('处理结果:', result.data)
 
         await this.browserInstance.forceCloseBrowser()
 
@@ -589,6 +825,10 @@ class ElectronApp {
       try {
         console.log('=== 收到停止群码替换请求 ===')
 
+        // 请求WeworkManager停止执行
+        this.weworkManager.requestStop()
+        console.log('已向WeworkManager发送停止请求')
+
         // 强制关闭浏览器实例
         if (this.browserInstance) {
           console.log('正在强制关闭浏览器...')
@@ -605,6 +845,242 @@ class ElectronApp {
         return {
           success: false,
           message: `停止群码替换失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    // TodoList相关功能
+    ipcMain.handle('get-todo-lists', async () => {
+      try {
+        console.log('=== 获取TodoList列表 ===')
+        const todoListManager = TodoListManager.getInstance()
+
+        const todoLists = await todoListManager.listTodoLists()
+
+        return {
+          success: true,
+          data: todoLists,
+          message: `获取到 ${todoLists.length} 个TodoList`,
+        }
+      } catch (error) {
+        console.error('获取TodoList列表失败:', error)
+        return {
+          success: false,
+          message: `获取TodoList列表失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    ipcMain.handle('get-todo-list-by-id', async (_, todoListId: string) => {
+      try {
+        console.log(`=== 获取TodoList详情: ${todoListId} ===`)
+        const todoListManager = TodoListManager.getInstance()
+
+        const todoList = await todoListManager.loadTodoList(todoListId)
+
+        if (todoList) {
+          console.log(
+            `📋 加载的TodoList进度: 完成${todoList.progress.completed}/${todoList.progress.total}`,
+          )
+          console.log(
+            `📋 加载的插件状态:`,
+            todoList.items.map(
+              (item: any, index: number) => `${index + 1}. ${item.pluginId}: ${item.status}`,
+            ),
+          )
+
+          return {
+            success: true,
+            data: todoList,
+            message: 'TodoList获取成功',
+          }
+        } else {
+          return {
+            success: false,
+            message: 'TodoList不存在',
+          }
+        }
+      } catch (error) {
+        console.error('获取TodoList详情失败:', error)
+        return {
+          success: false,
+          message: `获取TodoList详情失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    ipcMain.handle('delete-todo-list', async (_, todoListId: string) => {
+      try {
+        console.log(`=== 删除TodoList: ${todoListId} ===`)
+        const todoListManager = TodoListManager.getInstance()
+
+        const success = await todoListManager.deleteTodoList(todoListId)
+
+        if (success) {
+          return {
+            success: true,
+            message: 'TodoList删除成功',
+          }
+        } else {
+          return {
+            success: false,
+            message: 'TodoList删除失败，文件不存在',
+          }
+        }
+      } catch (error) {
+        console.error('删除TodoList失败:', error)
+        return {
+          success: false,
+          message: `删除TodoList失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    ipcMain.handle(
+      'resume-todo-list-execution',
+      async (_, todoListId: string, options: any = {}) => {
+        try {
+          console.log(`=== 接续执行TodoList: ${todoListId} ===`)
+          console.log('执行选项:', options)
+
+          const todoListManager = TodoListManager.getInstance()
+
+          // 加载TodoList
+          const todoList = await todoListManager.loadTodoList(todoListId)
+          if (!todoList) {
+            return {
+              success: false,
+              message: 'TodoList不存在',
+            }
+          }
+
+          // 获取需要处理的插件（按插件维度）
+          let pluginsToProcess = []
+          if (options.retryFailed) {
+            // 重试失败的插件
+            pluginsToProcess = todoList.items.filter((item: any) => item.status === 'failed')
+          } else {
+            // 执行待处理和失败的插件
+            pluginsToProcess = todoList.items.filter(
+              (item: any) => item.status === 'pending' || item.status === 'failed',
+            )
+          }
+
+          if (pluginsToProcess.length === 0) {
+            return {
+              success: false,
+              message: '没有需要处理的插件',
+            }
+          }
+
+          console.log(`需要处理 ${pluginsToProcess.length} 个插件`)
+
+          const operationRecords: any[] = []
+          let processedCount = 0
+          let successCount = 0
+          let failureCount = 0
+
+          // 逐个执行插件任务
+          for (const pluginItem of pluginsToProcess) {
+            // 检查是否请求停止
+            if (this.weworkManager.checkStopRequested()) {
+              console.log('🛑 检测到停止请求，终止接续执行')
+              await this.browserInstance.forceCloseBrowser()
+              return {
+                success: false,
+                message: '用户请求停止，接续执行已中断',
+                data: {
+                  processedCount,
+                  successCount,
+                  failureCount,
+                  todoListId,
+                  operationRecords,
+                },
+              }
+            }
+
+            try {
+              // 发送插件开始执行事件
+              this.sendPluginTaskStarted(pluginItem.pluginId, todoListId)
+
+              // 执行单个插件任务
+              const pluginResult = await this.weworkManager.executePluginTask(
+                pluginItem.pluginId,
+                todoListId,
+              )
+
+              if (pluginResult.success && pluginResult.data) {
+                operationRecords.push(...pluginResult.data.operationRecords)
+                processedCount += pluginResult.data.processedCount
+                successCount += pluginResult.data.successCount
+                failureCount += pluginResult.data.failureCount
+
+                // 发送插件执行完成事件
+                this.sendPluginTaskCompleted(pluginItem.pluginId, todoListId, pluginResult.data)
+              } else {
+                // 插件执行失败
+                failureCount += pluginItem.operationRecords?.length || 0
+                console.error(`插件 ${pluginItem.pluginId} 执行失败: ${pluginResult.message}`)
+
+                // 发送插件执行失败事件
+                this.sendPluginTaskFailed(pluginItem.pluginId, todoListId, pluginResult.message)
+              }
+            } catch (error) {
+              console.error(`执行插件 ${pluginItem.pluginId} 异常:`, error)
+              failureCount += pluginItem.operationRecords?.length || 0
+
+              // 发送插件执行失败事件
+              this.sendPluginTaskFailed(
+                pluginItem.pluginId,
+                todoListId,
+                error instanceof Error ? error.message : '未知错误',
+              )
+            }
+          }
+
+          console.log(
+            `接续执行完成: 处理 ${processedCount} 个操作，成功 ${successCount} 个，失败 ${failureCount} 个`,
+          )
+
+          return {
+            success: true,
+            message: `接续执行完成，处理 ${processedCount} 个操作，成功 ${successCount} 个，失败 ${failureCount} 个`,
+            data: {
+              processedCount,
+              successCount,
+              failureCount,
+              todoListId,
+              operationRecords,
+            },
+          }
+        } catch (error) {
+          console.error('接续执行TodoList失败:', error)
+          return {
+            success: false,
+            message: `接续执行TodoList失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          }
+        }
+      },
+    )
+
+    // 获取可重试的插件列表
+    ipcMain.handle('get-retryable-plugins', async (_, todoListId: string) => {
+      try {
+        console.log(`=== 获取可重试操作列表: ${todoListId} ===`)
+        const todoListManager = TodoListManager.getInstance()
+
+        const retryablePlugins = await todoListManager.getRetryablePlugins(todoListId)
+
+        return {
+          success: true,
+          data: retryablePlugins,
+          message: `找到 ${retryablePlugins.length} 个可重试的插件`,
+        }
+      } catch (error) {
+        console.error('获取可重试操作列表失败:', error)
+        return {
+          success: false,
+          message: `获取可重试操作列表失败: ${error instanceof Error ? error.message : '未知错误'}`,
         }
       }
     })
@@ -645,6 +1121,72 @@ class ElectronApp {
   private sendButtonStateUpdate(status: 'completed' | 'failed'): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('button-state-update', { status })
+    }
+  }
+
+  // 发送TodoList创建事件到渲染进程
+  private sendTodoListCreated(todoListId: string): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('todo-list-created', { todoListId })
+    }
+  }
+
+  // 发送插件任务列表生成完成事件到渲染进程
+  private sendPluginTaskGenerated(
+    todoListId: string,
+    pluginCount: number,
+    totalOperations: number,
+  ): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin-task-generated', {
+        todoListId,
+        pluginCount,
+        totalOperations,
+      })
+    }
+  }
+
+  // 发送单个插件开始执行事件到渲染进程
+  private sendPluginTaskStarted(pluginId: string, todoListId: string): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin-task-started', {
+        pluginId,
+        todoListId,
+      })
+    }
+  }
+
+  // 发送单个插件执行完成事件到渲染进程
+  private sendPluginTaskCompleted(pluginId: string, todoListId: string, data: any): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin-task-completed', {
+        pluginId,
+        todoListId,
+        data,
+      })
+    }
+  }
+
+  // 发送单个插件执行失败事件到渲染进程
+  private sendPluginTaskFailed(pluginId: string, todoListId: string, error: string): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin-task-failed', {
+        pluginId,
+        todoListId,
+        error,
+      })
+    }
+  }
+
+  // 发送插件状态更新事件到渲染进程 - 用于实时更新UI
+  private sendPluginStatusUpdate(pluginId: string, todoListId: string, status: string): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin-status-update', {
+        pluginId,
+        todoListId,
+        status,
+        timestamp: Date.now(),
+      })
     }
   }
 

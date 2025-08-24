@@ -24,6 +24,9 @@ export interface AppConfig {
   WEWORK_GROUP_MANAGEMENT_URL: string
   WEWORK_GROUP_MEMBER_DELETE_THRESHOLD: number
 
+  // TodoList配置
+  TODOLIST_STORAGE_PATH: string
+
   // 消息模板配置
   WEIBAN_WELCOME_MSG: string
   WEIBAN_WELCOME_MSG_INDEPENDENT: string
@@ -74,6 +77,9 @@ export class ConfigManager {
       WEWORK_GROUP_MANAGEMENT_URL: 'https://work.weixin.qq.com/wework_admin/frame#chatGroup',
       WEWORK_GROUP_MEMBER_DELETE_THRESHOLD: 100,
 
+      // TodoList配置
+      TODOLIST_STORAGE_PATH: path.join(os.homedir(), '.wework-automation', 'todolist'),
+
       // 消息模板配置
       WEIBAN_WELCOME_MSG: '欢迎来到{{storeName}}，为您提供优质的产品和服务。',
       WEIBAN_WELCOME_MSG_INDEPENDENT: '欢迎来到{{storeName}}，为您提供优质的产品和服务。',
@@ -96,7 +102,8 @@ export class ConfigManager {
     if (
       key === 'USER_DATA_DIR' ||
       key === 'STORE_AVATAR_PATH' ||
-      key === 'QRCODE_TARGET_STORE_PATH'
+      key === 'QRCODE_TARGET_STORE_PATH' ||
+      key === 'TODOLIST_STORAGE_PATH'
     ) {
       return value.startsWith('~') ? path.join(os.homedir(), value.slice(1)) : value
     }
@@ -230,6 +237,12 @@ export class ConfigManager {
       lines.push(
         `WEWORK_GROUP_MEMBER_DELETE_THRESHOLD=${config.WEWORK_GROUP_MEMBER_DELETE_THRESHOLD}`,
       )
+      lines.push('')
+
+      // TodoList配置
+      lines.push('# ==================== TodoList配置 ====================')
+      lines.push('# TodoList文件存储路径')
+      lines.push(`TODOLIST_STORAGE_PATH=${config.TODOLIST_STORAGE_PATH}`)
       lines.push('')
 
       // 消息模板配置

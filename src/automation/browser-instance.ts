@@ -12,6 +12,7 @@ export class BrowserInstance {
   private static instance: BrowserInstance
   private browser: puppeteer.Browser | null = null
   private userDataDir: string
+  private isStopRequested: boolean = false
 
   private constructor() {
     const config = ConfigManager.loadConfig()
@@ -26,6 +27,21 @@ export class BrowserInstance {
       BrowserInstance.instance = new BrowserInstance()
     }
     return BrowserInstance.instance
+  }
+
+  /**
+   * 设置停止标志
+   */
+  public setStopRequested(stop: boolean): void {
+    this.isStopRequested = stop
+    console.log(`🛑 BrowserInstance停止标志设置为: ${stop}`)
+  }
+
+  /**
+   * 检查是否被请求停止
+   */
+  public isStopRequestedFlag(): boolean {
+    return this.isStopRequested
   }
 
   /**
@@ -157,6 +173,11 @@ export class BrowserInstance {
    * 获取浏览器实例
    */
   public async getBrowser(): Promise<puppeteer.Browser> {
+    // 检查是否被请求停止
+    if (this.isStopRequested) {
+      throw new Error('浏览器实例已被停止，无法创建新的浏览器实例')
+    }
+
     if (!this.browser) {
       const initResult = await this.initBrowser()
       if (!initResult.success) {
@@ -291,6 +312,9 @@ export class BrowserInstance {
    * 完全关闭浏览器实例和进程（关闭前保存Cookie）
    */
   public async forceCloseBrowser(): Promise<void> {
+    // 设置停止标志，防止重新创建浏览器
+    this.setStopRequested(true)
+
     if (this.browser) {
       try {
         // 关闭前保存所有Cookie

@@ -225,6 +225,83 @@
                         </div>
                     </form>
                     
+                    <!-- TodoList展示和操作 -->
+                    <div class="todolist-panel">
+                        <div class="todolist-header">
+                            <h3>任务列表</h3>
+                            <div class="todolist-controls">
+                                <button id="refreshTodoListBtn" class="btn btn-small">刷新</button>
+                                <button id="loadTodoListBtn" class="btn btn-small">加载现有任务</button>
+                                <button id="resumeTodoListBtn" class="btn btn-small" disabled>接续执行</button>
+                                <button id="deleteTodoListBtn" class="btn btn-small btn-danger" disabled>删除任务</button>
+                            </div>
+                        </div>
+                        
+                        <!-- TodoList选择器 -->
+                        <div class="todolist-selector">
+                            <label for="todoListSelect">选择任务列表：</label>
+                            <select id="todoListSelect" class="todolist-select">
+                                <option value="">暂无任务列表</option>
+                            </select>
+                        </div>
+                        
+                        <!-- TodoList详情展示 -->
+                        <div id="todoListDetails" class="todolist-details" style="display: none;">
+                            <div class="todolist-info">
+                                <h4 id="todoListName">任务列表名称</h4>
+                                <div class="todolist-meta">
+                                    <span id="todoListStatus" class="status-badge">状态</span>
+                                    <span id="todoListCreatedAt" class="meta-text">创建时间</span>
+                                    <span id="todoListUpdatedAt" class="meta-text">更新时间</span>
+                                </div>
+                                <div class="todolist-progress">
+                                    <div class="progress-bar-container">
+                                        <div id="todoListProgressBar" class="progress-bar">
+                                            <div class="progress-fill" style="width: 0%"></div>
+                                        </div>
+                                        <span id="todoListProgressText" class="progress-text">0/0</span>
+                                    </div>
+                                    <div class="progress-stats">
+                                        <span class="stat-item">总计: <span id="totalItems">0</span></span>
+                                        <span class="stat-item completed">完成: <span id="completedItems">0</span></span>
+                                        <span class="stat-item failed">失败: <span id="failedItems">0</span></span>
+                                        <span class="stat-item pending">待处理: <span id="pendingItems">0</span></span>
+                                        <span class="stat-item in-progress">进行中: <span id="inProgressItems">0</span></span>
+                                    </div>
+                                </div>
+                                
+                                <!-- TodoList操作按钮 -->
+                                <div class="todolist-actions">
+                                    <button id="resumeTodoListBtn" class="btn" style="display: none;">▶️ 继续执行</button>
+                                    <button id="deleteTodoListBtn" class="btn btn-danger" style="display: none;">🗑️ 删除任务</button>
+                                </div>
+                            </div>
+                            
+                            <!-- TodoItem列表（插件维度） -->
+                            <div class="todoitems-container">
+                                <div class="todoitems-header">
+                                    <h4>插件任务列表</h4>
+                                    <div class="filter-controls">
+                                        <label for="statusFilter">状态筛选：</label>
+                                        <select id="statusFilter" class="status-filter">
+                                            <option value="all">全部</option>
+                                            <option value="pending">待处理</option>
+                                            <option value="in_progress">进行中</option>
+                                            <option value="completed">已完成</option>
+                                            <option value="failed">失败</option>
+                                        </select>
+                                        <button id="expandAllBtn" class="btn btn-small">展开全部</button>
+                                        <button id="collapseAllBtn" class="btn btn-small">收起全部</button>
+                                    </div>
+                                </div>
+                                <div id="todoItemsList" class="todoitems-list">
+                                    <!-- 插件级别的TodoItem将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
                     <!-- 执行状态和日志 -->
                     <div class="log-panel">
                         <div class="log-header">
@@ -337,6 +414,11 @@
                             <label for="weworkGroupMemberDeleteThreshold">群成员删除阈值</label>
                             <input type="number" id="weworkGroupMemberDeleteThreshold" name="WEWORK_GROUP_MEMBER_DELETE_THRESHOLD" value="100" min="1">
                             <small class="form-text">当群成员数量达到此阈值时，该群将被标记为删除并重新创建</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="todoListStoragePath">TodoList存储路径</label>
+                            <input type="text" id="todoListStoragePath" name="TODOLIST_STORAGE_PATH" required>
+                            <small class="form-text">TodoList文件的存储目录，支持~表示用户主目录</small>
                         </div>
                     </div>
 

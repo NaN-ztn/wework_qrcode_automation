@@ -44,6 +44,52 @@ interface ElectronAPI {
     searchKeyword?: string
   }) => Promise<{ success: boolean; message: string; data?: any }>
   stopGroupReplace: () => Promise<{ success: boolean; message: string }>
+  // 新的分阶段执行接口
+  generatePluginTasks: (options: {
+    searchKeyword?: string
+  }) => Promise<{ success: boolean; message: string; data?: any }>
+  executePluginTask: (options: {
+    pluginId: string
+    todoListId: string
+  }) => Promise<{ success: boolean; message: string; data?: any }>
+  // TodoList相关接口
+  getTodoLists: () => Promise<{ success: boolean; data?: any[]; message?: string }>
+  getTodoListById: (
+    todoListId: string,
+  ) => Promise<{ success: boolean; data?: any; message?: string }>
+  deleteTodoList: (todoListId: string) => Promise<{ success: boolean; message: string }>
+  resumeTodoListExecution: (
+    todoListId: string,
+    options?: {
+      resumeFromItemId?: string
+      skipCompleted?: boolean
+      retryFailed?: boolean
+    },
+  ) => Promise<{ success: boolean; message: string; data?: any }>
+  getRetryablePlugins: (
+    todoListId: string,
+  ) => Promise<{ success: boolean; data?: any[]; message?: string }>
+  onTodoListUpdate: (callback: (todoList: any) => void) => void
+  onTodoListCreated: (callback: (data: { todoListId: string }) => void) => void
+  // 新的插件任务事件监听器
+  onPluginTaskGenerated: (
+    callback: (data: { todoListId: string; pluginCount: number; totalOperations: number }) => void,
+  ) => void
+  onPluginTaskStarted: (callback: (data: { pluginId: string; todoListId: string }) => void) => void
+  onPluginTaskCompleted: (
+    callback: (data: { pluginId: string; todoListId: string; data: any }) => void,
+  ) => void
+  onPluginTaskFailed: (
+    callback: (data: { pluginId: string; todoListId: string; error: string }) => void,
+  ) => void
+  onPluginStatusUpdate: (
+    callback: (data: {
+      pluginId: string
+      todoListId: string
+      status: string
+      timestamp: number
+    }) => void,
+  ) => void
 }
 
 const electronAPI: ElectronAPI = {
@@ -76,6 +122,38 @@ const electronAPI: ElectronAPI = {
   getTaskHistory: () => ipcRenderer.invoke('get-task-history'),
   executeGroupReplace: (options) => ipcRenderer.invoke('execute-group-replace', options),
   stopGroupReplace: () => ipcRenderer.invoke('stop-group-replace'),
+  // 新的分阶段执行实现
+  generatePluginTasks: (options) => ipcRenderer.invoke('generate-plugin-tasks', options),
+  executePluginTask: (options) => ipcRenderer.invoke('execute-plugin-task', options),
+  // TodoList相关实现
+  getTodoLists: () => ipcRenderer.invoke('get-todo-lists'),
+  getTodoListById: (todoListId) => ipcRenderer.invoke('get-todo-list-by-id', todoListId),
+  deleteTodoList: (todoListId) => ipcRenderer.invoke('delete-todo-list', todoListId),
+  resumeTodoListExecution: (todoListId, options) =>
+    ipcRenderer.invoke('resume-todo-list-execution', todoListId, options),
+  getRetryablePlugins: (todoListId) => ipcRenderer.invoke('get-retryable-plugins', todoListId),
+  onTodoListUpdate: (callback) => {
+    ipcRenderer.on('todo-list-update', (_, todoList) => callback(todoList))
+  },
+  onTodoListCreated: (callback) => {
+    ipcRenderer.on('todo-list-created', (_, data) => callback(data))
+  },
+  // 新的插件任务事件监听器实现
+  onPluginTaskGenerated: (callback) => {
+    ipcRenderer.on('plugin-task-generated', (_, data) => callback(data))
+  },
+  onPluginTaskStarted: (callback) => {
+    ipcRenderer.on('plugin-task-started', (_, data) => callback(data))
+  },
+  onPluginTaskCompleted: (callback) => {
+    ipcRenderer.on('plugin-task-completed', (_, data) => callback(data))
+  },
+  onPluginTaskFailed: (callback) => {
+    ipcRenderer.on('plugin-task-failed', (_, data) => callback(data))
+  },
+  onPluginStatusUpdate: (callback) => {
+    ipcRenderer.on('plugin-status-update', (_, data) => callback(data))
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)

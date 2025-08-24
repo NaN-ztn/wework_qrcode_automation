@@ -6,7 +6,7 @@ class RendererApp {
   private logsDiv!: HTMLDivElement
   private progressPanel!: HTMLDivElement
   private progressBar!: HTMLDivElement
-  private progressText!: HTMLDivElement
+  private mainProgressText!: HTMLDivElement
 
   // 门店表单相关元素
   private storeForm!: HTMLFormElement
@@ -68,6 +68,43 @@ class RendererApp {
   private clearGroupReplaceLogsBtn!: HTMLButtonElement
   private autoScrollGroupReplaceBtn!: HTMLButtonElement
 
+  // TodoList相关元素
+  private loadTodoListBtn!: HTMLButtonElement
+  private resumeTodoListBtn!: HTMLButtonElement
+  private todoListContainer!: HTMLDivElement
+  private todoListProgress!: HTMLDivElement
+  private todoProgressText!: HTMLSpanElement
+  private progressPercentage!: HTMLSpanElement
+  private todoProgressBar!: HTMLDivElement
+  private completedCount!: HTMLSpanElement
+  private failedCount!: HTMLSpanElement
+  private pendingCount!: HTMLSpanElement
+
+  // TodoList详情相关元素
+  private refreshTodoListBtn!: HTMLButtonElement
+  private deleteTodoListBtn!: HTMLButtonElement
+  private todoListSelect!: HTMLSelectElement
+  private todoListDetails!: HTMLDivElement
+  private todoListName!: HTMLElement
+  private todoListStatus!: HTMLElement
+  private todoListCreatedAt!: HTMLElement
+  private todoListUpdatedAt!: HTMLElement
+  private todoListProgressBar!: HTMLElement
+  private todoListProgressText!: HTMLElement
+  private totalItems!: HTMLElement
+  private completedItems!: HTMLElement
+  private failedItems!: HTMLElement
+  private pendingItems!: HTMLElement
+  private inProgressItems!: HTMLElement
+  private statusFilter!: HTMLSelectElement
+  private todoItemsList!: HTMLDivElement
+  private expandAllBtn!: HTMLButtonElement
+  private collapseAllBtn!: HTMLButtonElement
+
+  // TodoList状态管理
+  private currentTodoList: any = null
+  private todoLists: any[] = []
+
   // 步骤状态管理
   private steps = [
     { id: 1, title: '检查企微登录状态', status: 'pending', message: '等待执行...' },
@@ -84,7 +121,9 @@ class RendererApp {
   }
 
   private isRunning = false
+  private isStopRequested = false
   private isGroupReplaceRunning = false
+  private isGroupReplaceStopRequested = false
   private autoScroll = true
   private autoScrollGroupReplace = true
 
@@ -105,7 +144,7 @@ class RendererApp {
     this.logsDiv = document.getElementById('logs') as HTMLDivElement
     this.progressPanel = document.getElementById('progressPanel') as HTMLDivElement
     this.progressBar = document.getElementById('progressBar') as HTMLDivElement
-    this.progressText = document.getElementById('progressText') as HTMLDivElement
+    this.mainProgressText = document.getElementById('progressText') as HTMLDivElement
 
     // 门店表单相关元素
     this.storeForm = document.getElementById('storeForm') as HTMLFormElement
@@ -169,6 +208,29 @@ class RendererApp {
     this.autoScrollGroupReplaceBtn = document.getElementById(
       'autoScrollGroupReplaceBtn',
     ) as HTMLButtonElement
+
+    // TodoList相关元素
+    this.todoListSelect = document.getElementById('todoListSelect') as HTMLSelectElement
+    this.todoListDetails = document.getElementById('todoListDetails') as HTMLDivElement
+    this.refreshTodoListBtn = document.getElementById('refreshTodoListBtn') as HTMLButtonElement
+    this.loadTodoListBtn = document.getElementById('loadTodoListBtn') as HTMLButtonElement
+    this.resumeTodoListBtn = document.getElementById('resumeTodoListBtn') as HTMLButtonElement
+    this.deleteTodoListBtn = document.getElementById('deleteTodoListBtn') as HTMLButtonElement
+    this.todoListName = document.getElementById('todoListName') as HTMLElement
+    this.todoListStatus = document.getElementById('todoListStatus') as HTMLElement
+    this.todoListCreatedAt = document.getElementById('todoListCreatedAt') as HTMLElement
+    this.todoListUpdatedAt = document.getElementById('todoListUpdatedAt') as HTMLElement
+    this.todoListProgressBar = document.getElementById('todoListProgressBar') as HTMLElement
+    this.todoListProgressText = document.getElementById('todoListProgressText') as HTMLElement
+    this.totalItems = document.getElementById('totalItems') as HTMLElement
+    this.completedItems = document.getElementById('completedItems') as HTMLElement
+    this.failedItems = document.getElementById('failedItems') as HTMLElement
+    this.pendingItems = document.getElementById('pendingItems') as HTMLElement
+    this.inProgressItems = document.getElementById('inProgressItems') as HTMLElement
+    this.statusFilter = document.getElementById('statusFilter') as HTMLSelectElement
+    this.todoItemsList = document.getElementById('todoItemsList') as HTMLDivElement
+    this.expandAllBtn = document.getElementById('expandAllBtn') as HTMLButtonElement
+    this.collapseAllBtn = document.getElementById('collapseAllBtn') as HTMLButtonElement
   }
 
   private setupEventListeners(): void {
@@ -209,6 +271,16 @@ class RendererApp {
     this.groupSearchKeywordInput.addEventListener('input', () => this.validateGroupReplaceForm())
     this.groupSearchKeywordInput.addEventListener('change', () => this.validateGroupReplaceForm())
 
+    // TodoList相关控制
+    this.refreshTodoListBtn.addEventListener('click', () => this.loadTodoLists())
+    this.loadTodoListBtn.addEventListener('click', () => this.loadTodoLists())
+    this.resumeTodoListBtn.addEventListener('click', () => this.resumeTodoListExecution())
+    this.deleteTodoListBtn.addEventListener('click', () => this.deleteTodoList())
+    this.todoListSelect.addEventListener('change', () => this.onTodoListSelectChange())
+    this.statusFilter.addEventListener('change', () => this.filterTodoItems())
+    this.expandAllBtn.addEventListener('click', () => this.expandAllPlugins())
+    this.collapseAllBtn.addEventListener('click', () => this.collapseAllPlugins())
+
     // 群码替换日志控制
     this.clearGroupReplaceLogsBtn.addEventListener('click', () => this.clearGroupReplaceLogs())
     this.autoScrollGroupReplaceBtn.addEventListener('click', () =>
@@ -231,6 +303,8 @@ class RendererApp {
     this.setupQrCodeUpdateListener()
     this.setupConfigUpdateListener()
     this.setupButtonStateUpdateListener()
+    this.setupTodoListCreatedListener()
+    this.setupPluginTaskEventListeners()
   }
 
   private switchTab(tab: 'main' | 'groupReplace' | 'history' | 'config'): void {
@@ -252,6 +326,7 @@ class RendererApp {
       this.groupReplaceTab.classList.add('active')
       this.groupReplacePanel.classList.add('active')
       this.initGroupReplaceTab() // 初始化群码替换页面
+      this.loadTodoLists() // 自动加载所有TodoList任务
     } else if (tab === 'history') {
       this.historyTab.classList.add('active')
       this.historyPanel.classList.add('active')
@@ -600,6 +675,10 @@ class RendererApp {
 
   private async executeTask(): Promise<void> {
     try {
+      // 立即重置停止标志，表示开始新任务
+      this.isStopRequested = false
+      console.log('🔄 主页前端已重置停止标志，开始新任务')
+
       // 第一层验证：基本表单验证
       if (!this.validateForm()) {
         this.addLog('❌ 请填写完整的门店信息', 'error')
@@ -882,8 +961,12 @@ class RendererApp {
   }
 
   private async stopExecution(): Promise<void> {
+    this.addLog('正在停止执行...', 'info')
+
+    // 立即设置停止标志，防止新任务开始
+    this.isStopRequested = true
+
     try {
-      this.addLog('正在停止执行...', 'info')
       const result = await window.electronAPI.stopExecution()
 
       if (result.success) {
@@ -893,6 +976,10 @@ class RendererApp {
       }
     } catch (error) {
       this.addLog(`停止执行失败: ${error}`, 'error')
+    } finally {
+      // 恢复运行状态
+      this.isRunning = false
+      this.validateForm() // 重新验证表单以更新按钮状态
     }
   }
 
@@ -920,7 +1007,15 @@ class RendererApp {
     // 监听主进程日志
     window.electronAPI.onMainProcessLog(
       (logData: { level: string; message: string; timestamp: string }) => {
+        // 添加到主页日志区域
         this.addMainProcessLog(
+          logData.message,
+          logData.level as 'log' | 'error' | 'warn',
+          logData.timestamp,
+        )
+
+        // 同时添加到群码替换日志区域
+        this.addGroupReplaceMainProcessLog(
           logData.message,
           logData.level as 'log' | 'error' | 'warn',
           logData.timestamp,
@@ -1007,7 +1102,10 @@ class RendererApp {
     }
   }
 
-  private addGroupReplaceLog(message: string, type: 'info' | 'success' | 'error'): void {
+  private addGroupReplaceLog(
+    message: string,
+    type: 'info' | 'success' | 'error' | 'warning',
+  ): void {
     // 统一使用主页的日志系统
     const timestamp = new Date().toLocaleTimeString()
     const logEntry = document.createElement('div')
@@ -1029,6 +1127,32 @@ class RendererApp {
     // 在群码替换区域也显示
     const groupLogEntry = logEntry.cloneNode(true) as HTMLElement
     this.groupReplaceLogs.appendChild(groupLogEntry)
+    if (this.autoScrollGroupReplace) {
+      this.groupReplaceLogs.scrollTop = this.groupReplaceLogs.scrollHeight
+    }
+  }
+
+  private addGroupReplaceMainProcessLog(
+    message: string,
+    level: 'log' | 'error' | 'warn',
+    timestamp: string,
+  ): void {
+    // 转换日志级别为群码替换支持的类型
+    const typeMap = { log: 'info', error: 'error', warn: 'warning' }
+    const type = typeMap[level] as 'info' | 'error' | 'warning'
+
+    const logEntry = document.createElement('div')
+    logEntry.className = `log-entry ${type} main-process`
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-source">[主进程]</span> <span class="log-message">${message}</span>`
+
+    // 移除群码替换区域的占位符（如果存在）
+    const placeholder = this.groupReplaceLogs.querySelector('.log-placeholder')
+    if (placeholder) {
+      placeholder.remove()
+    }
+
+    // 添加到群码替换日志区域
+    this.groupReplaceLogs.appendChild(logEntry)
     if (this.autoScrollGroupReplace) {
       this.groupReplaceLogs.scrollTop = this.groupReplaceLogs.scrollHeight
     }
@@ -1197,6 +1321,10 @@ class RendererApp {
     event.preventDefault()
 
     try {
+      // 立即重置停止标志，表示开始新任务
+      this.isGroupReplaceStopRequested = false
+      console.log('🔄 前端已重置停止标志，开始新任务')
+
       // 表单验证
       if (!this.validateGroupReplaceForm()) {
         this.addGroupReplaceLog('❌ 请输入搜索关键词', 'error')
@@ -1255,11 +1383,15 @@ class RendererApp {
       // 恢复运行状态
       this.isGroupReplaceRunning = false
       this.validateGroupReplaceForm() // 重新验证表单以更新按钮状态
+      this.updateTodoListButtons() // 更新TodoList按钮状态
     }
   }
 
   private async stopGroupReplace(): Promise<void> {
     this.addGroupReplaceLog('⏹ 用户请求停止群码替换任务', 'info')
+
+    // 立即设置停止标志，防止新任务开始
+    this.isGroupReplaceStopRequested = true
 
     try {
       // 禁用停止按钮防止重复点击
@@ -1280,11 +1412,559 @@ class RendererApp {
       // 恢复运行状态
       this.isGroupReplaceRunning = false
       this.validateGroupReplaceForm() // 重新验证表单以更新按钮状态
+      this.updateTodoListButtons() // 更新TodoList按钮状态
+    }
+  }
+
+  // TodoList相关方法
+
+  /**
+   * 加载TodoList列表
+   */
+  private async loadTodoLists(): Promise<void> {
+    try {
+      const result = await window.electronAPI.getTodoLists()
+
+      if (result.success && result.data) {
+        this.todoLists = result.data
+        // 按创建时间降序排序，最新的在前面
+        this.todoLists.sort((a, b) => b.createdAt - a.createdAt)
+        this.updateTodoListSelect()
+
+        // 自动选择最近的任务
+        if (this.todoLists.length > 0) {
+          this.todoListSelect.value = this.todoLists[0].id
+          await this.onTodoListSelectChange()
+        }
+
+        this.addGroupReplaceLog(
+          `📋 获取到 ${this.todoLists.length} 个TodoList，已自动选择最新任务`,
+          'info',
+        )
+      } else {
+        this.addGroupReplaceLog(`❌ 获取TodoList失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 获取TodoList异常: ${error}`, 'error')
+    }
+  }
+
+  /**
+   * 更新TodoList选择器
+   */
+  private updateTodoListSelect(): void {
+    // 清空现有选项
+    this.todoListSelect.innerHTML = '<option value="">请选择TodoList</option>'
+
+    // 添加TodoList选项
+    this.todoLists.forEach((todoList) => {
+      const option = document.createElement('option')
+      option.value = todoList.id
+      option.textContent = `${todoList.name} (${todoList.status})`
+      this.todoListSelect.appendChild(option)
+    })
+  }
+
+  /**
+   * TodoList选择变化事件处理
+   */
+  private async onTodoListSelectChange(): Promise<void> {
+    const selectedId = this.todoListSelect.value
+
+    if (!selectedId) {
+      this.todoListDetails.style.display = 'none'
+      this.currentTodoList = null
+      this.updateTodoListButtons()
+      return
+    }
+
+    try {
+      const result = await window.electronAPI.getTodoListById(selectedId)
+
+      if (result.success && result.data) {
+        this.currentTodoList = result.data
+        this.displayTodoListDetails(this.currentTodoList)
+        this.updateTodoListButtons()
+      } else {
+        this.addGroupReplaceLog(`❌ 获取TodoList详情失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 获取TodoList详情异常: ${error}`, 'error')
+    }
+  }
+
+  /**
+   * 显示TodoList详情
+   */
+  private displayTodoListDetails(todoList: any): void {
+    // 显示基本信息
+    this.todoListName.textContent = todoList.name
+    this.todoListStatus.textContent = todoList.status
+    this.todoListStatus.className = `status-badge ${todoList.status}`
+    this.todoListCreatedAt.textContent = `创建: ${new Date(todoList.createdAt).toLocaleString('zh-CN')}`
+    this.todoListUpdatedAt.textContent = `更新: ${new Date(todoList.updatedAt).toLocaleString('zh-CN')}`
+
+    // 显示进度信息
+    const progress = todoList.progress
+    const progressPercentage =
+      progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0
+
+    this.todoListProgressBar
+      .querySelector('.progress-fill')!
+      .setAttribute('style', `width: ${progressPercentage}%`)
+    this.todoListProgressText.textContent = `${progress.completed}/${progress.total}`
+
+    this.totalItems.textContent = progress.total.toString()
+    this.completedItems.textContent = progress.completed.toString()
+    this.failedItems.textContent = progress.failed.toString()
+    this.pendingItems.textContent = progress.pending.toString()
+    this.inProgressItems.textContent = progress.inProgress.toString()
+
+    // 显示TodoItem列表
+    this.displayTodoItems(todoList.items)
+
+    // 显示详情面板
+    this.todoListDetails.style.display = 'block'
+  }
+
+  /**
+   * 显示TodoItem列表（插件级别）
+   */
+  private displayTodoItems(items: any[]): void {
+    this.todoItemsList.innerHTML = ''
+
+    const filteredItems = this.getFilteredTodoItems(items)
+
+    if (filteredItems.length === 0) {
+      this.todoItemsList.innerHTML = '<div class="no-items">没有符合条件的插件任务</div>'
+      return
+    }
+
+    filteredItems.forEach((item) => {
+      const itemElement = this.createPluginItemElement(item)
+      this.todoItemsList.appendChild(itemElement)
+    })
+  }
+
+  /**
+   * 根据状态筛选TodoItem
+   */
+  private getFilteredTodoItems(items: any[]): any[] {
+    const filterStatus = this.statusFilter.value
+
+    if (filterStatus === 'all') {
+      return items
+    }
+
+    return items.filter((item) => item.status === filterStatus)
+  }
+
+  /**
+   * 创建插件级别的TodoItem元素
+   */
+  private createPluginItemElement(item: any): HTMLElement {
+    const div = document.createElement('div')
+    div.className = `plugin-item ${item.status}`
+    div.setAttribute('data-plugin-id', item.pluginId)
+
+    const statusIcon = this.getStatusIcon(item.status)
+    // 插件进度基于状态：完成=100%，进行中=50%，其他=0%
+    const progressPercent =
+      item.status === 'completed' ? 100 : item.status === 'in_progress' ? 50 : 0
+
+    div.innerHTML = `
+      <div class="plugin-item-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <div class="plugin-item-main">
+          <span class="status-icon">${statusIcon}</span>
+          <h5 class="plugin-item-title">${item.pluginName} (${item.pluginId})</h5>
+          <span class="plugin-item-status ${item.status}">${this.getStatusText(item.status)}</span>
+          <span class="expand-icon">📂</span>
+        </div>
+        <div class="plugin-item-progress">
+          <div class="progress-bar-mini">
+            <div class="progress-fill-mini" style="width: ${progressPercent}%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="plugin-item-content">
+        <div class="plugin-summary">
+          <p>插件包含 ${item.operationRecords?.length || 0} 个群组操作记录</p>
+          ${item.error ? `<div class="plugin-error">错误信息: ${item.error}</div>` : ''}
+        </div>
+      </div>
+    `
+
+    return div
+  }
+
+  /**
+   * 展开所有插件
+   */
+  private expandAllPlugins(): void {
+    const pluginItems = this.todoItemsList.querySelectorAll('.plugin-item')
+    pluginItems.forEach((item) => {
+      item.classList.add('expanded')
+    })
+  }
+
+  /**
+   * 收起所有插件
+   */
+  private collapseAllPlugins(): void {
+    const pluginItems = this.todoItemsList.querySelectorAll('.plugin-item')
+    pluginItems.forEach((item) => {
+      item.classList.remove('expanded')
+    })
+  }
+
+  /**
+   * 获取状态图标
+   */
+  private getStatusIcon(status: string): string {
+    const icons: Record<string, string> = {
+      pending: '⏳',
+      in_progress: '🔄',
+      completed: '✅',
+      failed: '❌',
+      skipped: '⏭️',
+    }
+    return icons[status] || '❓'
+  }
+
+  /**
+   * 获取状态文本
+   */
+  private getStatusText(status: string): string {
+    const texts: Record<string, string> = {
+      pending: '待处理',
+      in_progress: '进行中',
+      completed: '已完成',
+      failed: '失败',
+      skipped: '已跳过',
+    }
+    return texts[status] || '未知'
+  }
+
+  /**
+   * 格式化时间信息
+   */
+  private formatTimeInfo(item: any): string {
+    if (item.completedAt) {
+      return `完成于: ${new Date(item.completedAt).toLocaleString('zh-CN')}`
+    } else if (item.startedAt) {
+      return `开始于: ${new Date(item.startedAt).toLocaleString('zh-CN')}`
+    } else {
+      return `创建于: ${new Date(item.createdAt).toLocaleString('zh-CN')}`
+    }
+  }
+
+  /**
+   * 筛选TodoItem
+   */
+  private filterTodoItems(): void {
+    if (this.currentTodoList) {
+      this.displayTodoItems(this.currentTodoList.items)
+    }
+  }
+
+  /**
+   * 更新TodoList按钮状态
+   */
+  private updateTodoListButtons(): void {
+    const hasSelected = !!this.currentTodoList
+
+    // 检查是否有未完成的插件（pending或failed状态）
+    const hasUnfinishedItems =
+      hasSelected &&
+      this.currentTodoList.items?.some(
+        (item: any) =>
+          item.status === 'pending' || item.status === 'failed' || item.status === 'in_progress',
+      )
+
+    const canResume = hasSelected && hasUnfinishedItems
+
+    // 显示/隐藏按钮
+    this.resumeTodoListBtn.style.display = hasSelected ? 'inline-block' : 'none'
+    this.deleteTodoListBtn.style.display = hasSelected ? 'inline-block' : 'none'
+
+    // 设置按钮状态
+    this.resumeTodoListBtn.disabled = !canResume || this.isGroupReplaceRunning
+    this.deleteTodoListBtn.disabled = !hasSelected || this.isGroupReplaceRunning
+  }
+
+  /**
+   * 接续执行TodoList
+   */
+  private async resumeTodoListExecution(): Promise<void> {
+    if (!this.currentTodoList) {
+      this.addGroupReplaceLog('❌ 请先选择一个TodoList', 'error')
+      return
+    }
+
+    try {
+      this.isGroupReplaceRunning = true
+      this.updateTodoListButtons()
+      this.validateGroupReplaceForm()
+
+      this.addGroupReplaceLog(`🔄 开始接续执行TodoList: ${this.currentTodoList.name}`, 'info')
+
+      const options = {
+        skipCompleted: true,
+        retryFailed: false,
+      }
+
+      const result = await window.electronAPI.resumeTodoListExecution(
+        this.currentTodoList.id,
+        options,
+      )
+
+      if (result.success) {
+        this.addGroupReplaceLog(`✅ TodoList接续执行完成: ${result.message}`, 'success')
+
+        // 重新加载TodoList详情
+        await this.onTodoListSelectChange()
+      } else {
+        this.addGroupReplaceLog(`❌ TodoList接续执行失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 TodoList接续执行异常: ${error}`, 'error')
+    } finally {
+      this.isGroupReplaceRunning = false
+      this.updateTodoListButtons()
+      this.validateGroupReplaceForm()
+    }
+  }
+
+  /**
+   * 删除TodoList
+   */
+  private async deleteTodoList(): Promise<void> {
+    if (!this.currentTodoList) {
+      this.addGroupReplaceLog('❌ 请先选择一个TodoList', 'error')
+      return
+    }
+
+    const confirmed = confirm(
+      `确定要删除TodoList "${this.currentTodoList.name}" 吗？此操作不可恢复。`,
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      const result = await window.electronAPI.deleteTodoList(this.currentTodoList.id)
+
+      if (result.success) {
+        this.addGroupReplaceLog(`✅ TodoList删除成功: ${result.message}`, 'success')
+
+        // 重新加载TodoList列表
+        await this.loadTodoLists()
+
+        // 清空当前选择
+        this.todoListSelect.value = ''
+        this.todoListDetails.style.display = 'none'
+        this.currentTodoList = null
+        this.updateTodoListButtons()
+      } else {
+        this.addGroupReplaceLog(`❌ TodoList删除失败: ${result.message}`, 'error')
+      }
+    } catch (error) {
+      this.addGroupReplaceLog(`💥 TodoList删除异常: ${error}`, 'error')
+    }
+  }
+
+  private setupTodoListCreatedListener(): void {
+    window.electronAPI.onTodoListCreated(async (data: { todoListId: string }) => {
+      console.log('收到TodoList创建通知:', data.todoListId)
+
+      // 自动切换到群码替换标签页
+      this.switchTab('groupReplace')
+
+      // 重新加载TodoList列表
+      await this.loadTodoLists()
+
+      // 自动选中新创建的TodoList
+      this.todoListSelect.value = data.todoListId
+      await this.onTodoListSelectChange()
+
+      this.addGroupReplaceLog(`📋 任务已创建并自动选中: ${data.todoListId}`, 'info')
+    })
+  }
+
+  /**
+   * 设置插件任务事件监听器，用于实时更新
+   */
+  private setupPluginTaskEventListeners(): void {
+    // 监听插件任务列表生成完成事件
+    window.electronAPI.onPluginTaskGenerated(
+      (data: { todoListId: string; pluginCount: number; totalOperations: number }) => {
+        console.log('收到插件任务列表生成完成通知:', data)
+        this.addGroupReplaceLog(
+          `📋 任务列表生成完成: ${data.pluginCount} 个插件，共 ${data.totalOperations} 个操作`,
+          'info',
+        )
+
+        // 自动切换到群码替换标签页
+        this.switchTab('groupReplace')
+
+        // 刷新TodoList显示
+        this.loadTodoLists().then(() => {
+          // 自动选中新创建的TodoList
+          this.todoListSelect.value = data.todoListId
+          this.onTodoListSelectChange()
+        })
+      },
+    )
+
+    // 监听单个插件开始执行事件
+    window.electronAPI.onPluginTaskStarted((data: { pluginId: string; todoListId: string }) => {
+      console.log('收到插件开始执行通知:', data)
+      this.addGroupReplaceLog(`🔄 开始执行插件: ${data.pluginId}`, 'info')
+
+      // 更新TodoList显示，标记插件为进行中状态
+      this.updatePluginStatus(data.pluginId, 'in_progress')
+    })
+
+    // 监听单个插件执行完成事件
+    window.electronAPI.onPluginTaskCompleted(
+      async (data: { pluginId: string; todoListId: string; data: any }) => {
+        console.log('收到插件执行完成通知:', data)
+        const { processedCount, successCount, failureCount } = data.data
+        this.addGroupReplaceLog(
+          `✅ 插件执行完成: ${data.pluginId} - 成功 ${successCount}, 失败 ${failureCount}`,
+          'success',
+        )
+
+        // 刷新TodoList详情显示，从文件重新加载最新状态
+        if (this.currentTodoList && this.currentTodoList.id === data.todoListId) {
+          console.log(`🔄 插件 ${data.pluginId} 完成，重新加载TodoList状态: ${data.todoListId}`)
+          await this.refreshTodoListDetails()
+          console.log(`✓ TodoList状态已重新加载，UI已更新`)
+        } else {
+          console.log(
+            `⚠️ 当前TodoList不匹配: 当前=${this.currentTodoList?.id}, 事件=${data.todoListId}`,
+          )
+        }
+      },
+    )
+
+    // 监听单个插件执行失败事件
+    window.electronAPI.onPluginTaskFailed(
+      async (data: { pluginId: string; todoListId: string; error: string }) => {
+        console.log('收到插件执行失败通知:', data)
+        this.addGroupReplaceLog(`❌ 插件执行失败: ${data.pluginId} - ${data.error}`, 'error')
+
+        // 先刷新TodoList详情显示，从文件重新加载最新状态
+        if (this.currentTodoList && this.currentTodoList.id === data.todoListId) {
+          console.log(`🔄 重新加载TodoList状态: ${data.todoListId}`)
+          await this.refreshTodoListDetails()
+          console.log(`✓ TodoList状态已重新加载`)
+        }
+
+        // 然后更新UI显示，标记插件为失败状态
+        console.log(`🎯 更新插件UI状态: ${data.pluginId} -> failed`)
+        this.updatePluginStatus(data.pluginId, 'failed')
+      },
+    )
+
+    // 监听插件状态实时更新事件
+    window.electronAPI.onPluginStatusUpdate(
+      async (data: { pluginId: string; todoListId: string; status: string; timestamp: number }) => {
+        console.log('收到插件状态更新通知:', data)
+        this.addGroupReplaceLog(`🔄 插件状态更新: ${data.pluginId} -> ${data.status}`, 'info')
+
+        // 实时更新UI显示
+        console.log(`🎯 实时更新插件UI状态: ${data.pluginId} -> ${data.status}`)
+        this.updatePluginStatus(data.pluginId, data.status as any)
+
+        // 如果是当前显示的TodoList，刷新详情显示
+        if (this.currentTodoList && this.currentTodoList.id === data.todoListId) {
+          console.log(`🔄 实时刷新TodoList详情: ${data.todoListId}`)
+          await this.refreshTodoListDetails()
+        }
+      },
+    )
+  }
+
+  /**
+   * 更新插件状态显示
+   */
+  private updatePluginStatus(pluginId: string, status: string): void {
+    if (!this.currentTodoList) return
+
+    // 在TodoList中找到对应的插件项并更新状态
+    const pluginItem = this.currentTodoList.items?.find((item: any) => item.pluginId === pluginId)
+    if (pluginItem) {
+      pluginItem.status = status
+
+      // 更新UI显示
+      const pluginElement = document.querySelector(`[data-plugin-id="${pluginId}"]`) as HTMLElement
+      if (pluginElement) {
+        // 更新插件元素的状态类名（移除旧状态，添加新状态）
+        pluginElement.className = pluginElement.className.replace(
+          /(pending|in_progress|completed|failed|skipped)/,
+          status,
+        )
+
+        // 更新状态图标
+        const statusIconElement = pluginElement.querySelector('.status-icon')
+        if (statusIconElement) {
+          statusIconElement.textContent = this.getStatusIcon(status)
+        }
+
+        // 更新状态文本
+        const statusTextElement = pluginElement.querySelector('.plugin-item-status')
+        if (statusTextElement) {
+          statusTextElement.textContent = this.getStatusText(status)
+          statusTextElement.className = `plugin-item-status ${status}`
+        }
+
+        console.log(`✓ UI已更新: 插件 ${pluginId} 状态 -> ${status}`)
+      }
+    }
+  }
+
+  /**
+   * 刷新TodoList详情显示
+   */
+  private async refreshTodoListDetails(): Promise<void> {
+    if (!this.currentTodoList) return
+
+    try {
+      console.log(`🔄 开始刷新TodoList详情: ${this.currentTodoList.id}`)
+
+      // 重新加载TodoList数据
+      const result = await window.electronAPI.getTodoListById(this.currentTodoList.id)
+      if (result.success && result.data) {
+        const oldProgress = this.currentTodoList.progress
+        this.currentTodoList = result.data
+        const newProgress = result.data.progress
+
+        console.log(
+          `📊 进度对比 - 旧: 完成${oldProgress?.completed || 0}/${oldProgress?.total || 0}, 新: 完成${newProgress?.completed || 0}/${newProgress?.total || 0}`,
+        )
+        console.log(
+          `📋 刷新后插件状态:`,
+          result.data.items.map(
+            (item: any, index: number) => `${index + 1}. ${item.pluginId}: ${item.status}`,
+          ),
+        )
+
+        this.displayTodoListDetails(this.currentTodoList)
+        console.log(`✅ TodoList详情刷新完成`)
+      } else {
+        console.error(`❌ 重新加载TodoList失败:`, result.message)
+      }
+    } catch (error) {
+      console.error('刷新TodoList详情失败:', error)
     }
   }
 }
 
+// 全局变量，用于HTML onclick访问
+let todoListRenderer: RendererApp
+
 // 等待DOM加载完成后初始化应用
 document.addEventListener('DOMContentLoaded', () => {
-  new RendererApp()
+  todoListRenderer = new RendererApp()
 })

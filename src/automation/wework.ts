@@ -1,6 +1,7 @@
 import * as puppeteer from 'puppeteer'
 import * as fs from 'fs'
 import { ConfigManager } from '../utils/config-manager'
+import { TodoListManager } from '../utils/todo-list-manager'
 import {
   AutomationResult,
   GroupReplaceOptions,
@@ -9,20 +10,55 @@ import {
   GroupOperationType,
   GroupOperationRecord,
   CollectGroupsResult,
+  TodoList,
+  TodoStatus,
 } from '../types'
 import { BaseManager } from './base'
 
 export class WeworkManager extends BaseManager {
   private static instance: WeworkManager
+  private todoListManager: TodoListManager
+  private currentTodoList: TodoList | null = null
+  private isStopRequested: boolean = false
 
   constructor() {
     super()
+    this.todoListManager = TodoListManager.getInstance()
+  }
+
+  /**
+   * 请求停止执行
+   */
+  public requestStop(): void {
+    console.log('🛑 收到停止请求，设置停止标志')
+    this.isStopRequested = true
+  }
+
+  /**
+   * 重置停止标志
+   */
+  public resetStopFlag(): void {
+    this.isStopRequested = false
+    // 同时重置BrowserInstance的停止标志
+    this.browserInstance.setStopRequested(false)
+  }
+
+  /**
+   * 检查是否请求停止
+   */
+  public checkStopRequested(): boolean {
+    if (this.isStopRequested) {
+      console.log('🛑 检测到停止请求，终止执行')
+      return true
+    }
+    return false
   }
 
   public static getInstance(): WeworkManager {
     if (!WeworkManager.instance) {
       WeworkManager.instance = new WeworkManager()
     }
+    WeworkManager.instance.resetStopFlag()
     return WeworkManager.instance
   }
 
@@ -886,16 +922,32 @@ export class WeworkManager extends BaseManager {
   }
 
   /**
-   * 群码自动替换群功能
-   * 基于参考项目的逻辑，自动搜索包含HK或DD关键字的群组，
-   * 提取群名称和群主信息，处理群名称数字递增，删除现有群成员并新建群聊
+   * 生成插件任务列表
+   * 仅收集群组信息并创建TodoList，不执行具体操作
    */
-  public async replaceGroupQrCode(options: GroupReplaceOptions = {}): Promise<AutomationResult> {
-    const startTime = Date.now()
-    const { searchKeyword = '' } = options
+  public async generatePluginTaskList(searchKeyword: string = ''): Promise<{
+    success: boolean
+    message: string
+    data?: {
+      todoListId: string
+      pluginCount: number
+      totalOperations: number
+    }
+  }> {
+    // 重置停止标志
+    if (this.checkStopRequested()) {
+      console.log('🛑 检测到停止请求，终止任务生成')
+      await this.forceCloseBrowser()
+      return {
+        success: false,
+        message: '用户请求停止，任务生成已中断',
+      }
+    }
 
-    console.log('开始群码自动替换功能')
+    console.log('开始生成插件任务列表')
     console.log(`搜索关键词: ${searchKeyword || '自动搜索HK/DD'}`)
+
+    const todoListManager = TodoListManager.getInstance()
 
     try {
       const config = ConfigManager.loadConfig()
@@ -922,6 +974,16 @@ export class WeworkManager extends BaseManager {
 
       await this.wait(2000)
 
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log('🛑 检测到停止请求，终止任务生成')
+        await this.forceCloseBrowser()
+        return {
+          success: false,
+          message: '用户请求停止，任务生成已中断',
+        }
+      }
+
       // 收集群组信息并生成操作记录
       const pluginResults = await this.collectValidGroups(page, searchKeyword)
 
@@ -929,6 +991,266 @@ export class WeworkManager extends BaseManager {
         return {
           success: false,
           message: '未找到任何群组，无操作需要执行',
+        }
+      }
+
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log('🛑 检测到停止请求，终止任务生成')
+        await this.forceCloseBrowser()
+        return {
+          success: false,
+          message: '用户请求停止，任务生成已中断',
+        }
+      }
+
+      // 创建TodoList
+      console.log('\n=== 创建TodoList ===')
+      const todoList = await todoListManager.createTodoListFromGroupReplace(
+        searchKeyword,
+        pluginResults,
+      )
+      console.log(`TodoList已创建: ${todoList.id}`)
+
+      // 启动自动保存
+      todoListManager.startAutoSave(todoList)
+
+      // 计算总操作数
+      const totalOperations = Object.values(pluginResults).reduce(
+        (sum, operations) => sum + operations.length,
+        0,
+      )
+
+      console.log(`=== 任务列表生成完成 ===`)
+      console.log(`插件数量: ${Object.keys(pluginResults).length}`)
+      console.log(`总操作数: ${totalOperations}`)
+
+      return {
+        success: true,
+        message: `任务列表生成完成，包含 ${Object.keys(pluginResults).length} 个插件，共 ${totalOperations} 个操作`,
+        data: {
+          todoListId: todoList.id,
+          pluginCount: Object.keys(pluginResults).length,
+          totalOperations,
+        },
+      }
+    } catch (error) {
+      console.error('生成插件任务列表失败:', error)
+
+      // 任务失败，关闭浏览器
+      console.log('任务生成失败，关闭浏览器...')
+      try {
+        await this.forceCloseBrowser()
+        console.log('浏览器已关闭')
+      } catch (closeError) {
+        console.error('关闭浏览器失败:', closeError)
+      }
+
+      return {
+        success: false,
+        message: `生成插件任务列表失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      }
+    }
+  }
+
+  /**
+   * 执行单个插件任务
+   * 基于TodoList中的插件信息执行具体操作
+   */
+  public async executePluginTask(
+    pluginId: string,
+    todoListId: string,
+  ): Promise<{
+    success: boolean
+    message: string
+    data?: {
+      processedCount: number
+      successCount: number
+      failureCount: number
+      operationRecords: GroupOperationRecord[]
+    }
+  }> {
+    console.log(`开始执行插件任务: ${pluginId}`)
+
+    const todoListManager = TodoListManager.getInstance()
+
+    try {
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log('🛑 检测到停止请求，跳过插件执行')
+        return {
+          success: false,
+          message: '用户请求停止，插件执行已中断',
+        }
+      }
+
+      // 加载TodoList获取插件信息
+      const todoList = await todoListManager.loadTodoList(todoListId)
+      if (!todoList) {
+        return {
+          success: false,
+          message: `TodoList不存在: ${todoListId}`,
+        }
+      }
+
+      // 找到对应的插件项
+      const pluginItem = todoList.items.find((item) => item.pluginId === pluginId)
+      if (!pluginItem) {
+        return {
+          success: false,
+          message: `插件不存在: ${pluginId}`,
+        }
+      }
+
+      // 提取操作记录
+      const operations = pluginItem.operationRecords || []
+      if (operations.length === 0) {
+        return {
+          success: false,
+          message: `插件 ${pluginId} 没有待执行的操作`,
+        }
+      }
+
+      const config = ConfigManager.loadConfig()
+      const targetUrl = config.WEWORK_GROUP_MANAGEMENT_URL
+
+      const page = await this.createPage()
+
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      )
+
+      console.log(`导航到群聊管理页面: ${targetUrl}`)
+      const response = await page.goto(targetUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      })
+
+      if (!response) {
+        return {
+          success: false,
+          message: '页面加载失败',
+        }
+      }
+
+      await this.wait(2000)
+
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log('🛑 检测到停止请求，终止插件执行')
+        await this.forceCloseBrowser()
+        return {
+          success: false,
+          message: '用户请求停止，插件执行已中断',
+        }
+      }
+
+      // 设置插件状态为进行中
+      await todoListManager.updatePluginStatusOnly(todoListId, pluginId, TodoStatus.IN_PROGRESS)
+
+      // 发送状态更新通知给主进程
+      console.log(`🔄 PLUGIN_STATUS_UPDATE: ${todoListId} ${pluginId} in_progress`)
+
+      // 执行插件操作
+      console.log(`=== 处理插件 ${pluginId} (${operations.length} 个操作) ===`)
+
+      const result = await this.processPluginOperationsWithoutStatusUpdate(
+        page,
+        pluginId,
+        operations,
+      )
+
+      // 安全关闭页面，不让关闭失败影响状态更新
+      try {
+        console.log(`🔄 开始关闭插件 ${pluginId} 的页面`)
+        await page.close()
+        console.log(`✅ 插件 ${pluginId} 页面关闭成功`)
+      } catch (closeError) {
+        console.error(`⚠️ 插件 ${pluginId} 页面关闭失败（不影响状态更新）:`, closeError)
+      }
+
+      console.log(`🎯 插件 ${pluginId} 处理完成: 成功 ${result.success}, 失败 ${result.failures}`)
+
+      // 根据执行结果更新插件状态 - 任何操作失败都标记整个插件失败
+      if (result.failures === 0) {
+        await todoListManager.updatePluginStatusOnly(todoListId, pluginId, TodoStatus.COMPLETED)
+        console.log(`🔄 PLUGIN_STATUS_UPDATE: ${todoListId} ${pluginId} completed`)
+        console.log(`✅ 插件 ${pluginId} 所有操作成功，标记为已完成`)
+      } else {
+        await todoListManager.updatePluginStatusOnly(
+          todoListId,
+          pluginId,
+          TodoStatus.FAILED,
+          `执行失败: 成功${result.success}个，失败${result.failures}个`,
+        )
+        console.log(`🔄 PLUGIN_STATUS_UPDATE: ${todoListId} ${pluginId} failed`)
+        console.log(`❌ 插件 ${pluginId} 有操作失败，整个插件标记为失败并跳过`)
+      }
+
+      console.log(`✅ 插件状态已更新为最终状态`)
+
+      const pluginResult = {
+        success: result.failures === 0,
+        message: `插件 ${pluginId} 执行完成: 成功 ${result.success}, 失败 ${result.failures}`,
+        data: {
+          processedCount: result.processed,
+          successCount: result.success,
+          failureCount: result.failures,
+          operationRecords: result.records,
+        },
+      }
+
+      console.log(`🚀 即将返回插件 ${pluginId} 执行结果:`, pluginResult.success ? '成功' : '失败')
+      return pluginResult
+    } catch (error) {
+      console.error(`执行插件 ${pluginId} 失败:`, error)
+
+      // 标记插件为失败状态
+      try {
+        await todoListManager.updatePluginStatusOnly(
+          todoListId,
+          pluginId,
+          TodoStatus.FAILED,
+          error instanceof Error ? error.message : '插件执行失败',
+        )
+        console.log(`🔄 PLUGIN_STATUS_UPDATE: ${todoListId} ${pluginId} failed`)
+        console.log(`✓ 插件 ${pluginId} 状态已更新为FAILED`)
+      } catch (updateError) {
+        console.error('更新插件状态失败:', updateError)
+      }
+
+      return {
+        success: false,
+        message: `执行插件 ${pluginId} 失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      }
+    }
+  }
+
+  /**
+   * 群码自动替换群功能
+   * 基于参考项目的逻辑，自动搜索包含HK或DD关键字的群组，
+   * 提取群名称和群主信息，处理群名称数字递增，删除现有群成员并新建群聊
+   *
+   * 重构为协调器模式：
+   * - 先生成插件任务列表
+   * - 再逐个执行插件任务
+   */
+  public async replaceGroupQrCode(options: GroupReplaceOptions = {}): Promise<AutomationResult> {
+    const startTime = Date.now()
+    const { searchKeyword = '' } = options
+
+    console.log('开始群码自动替换功能（新架构）')
+    console.log(`搜索关键词: ${searchKeyword || '自动搜索HK/DD'}`)
+
+    try {
+      // 阶段1: 生成插件任务列表
+      console.log('\n=== 阶段1: 生成插件任务列表 ===')
+      const generateResult = await this.generatePluginTaskList(searchKeyword)
+
+      if (!generateResult.success) {
+        return {
+          success: false,
+          message: generateResult.message,
           data: {
             searchKeyword,
             processedCount: 0,
@@ -937,43 +1259,84 @@ export class WeworkManager extends BaseManager {
             executionTime: Date.now() - startTime,
             operationRecords: [],
             processedGroups: [],
-          } as GroupReplaceResultData,
+            todoListId: null,
+          } as GroupReplaceResultData & { todoListId: string | null },
         }
       }
 
-      console.log(`\n=== 开始执行群组操作 ===`)
+      const { todoListId, pluginCount, totalOperations } = generateResult.data!
+      console.log(`任务列表生成成功: ${pluginCount} 个插件，共 ${totalOperations} 个操作`)
 
-      console.log(`需要操作的插件数: ${Object.keys(pluginResults).length}`)
+      // 阶段2: 逐个执行插件任务
+      console.log('\n=== 阶段2: 执行插件任务 ===')
 
-      // 按plugin串行执行操作，每个plugin有独立的editUrl
+      const todoListManager = TodoListManager.getInstance()
+      const todoList = await todoListManager.loadTodoList(todoListId)
+
+      if (!todoList) {
+        return {
+          success: false,
+          message: `TodoList不存在: ${todoListId}`,
+          data: {
+            searchKeyword,
+            processedCount: 0,
+            successCount: 0,
+            failureCount: 0,
+            executionTime: Date.now() - startTime,
+            operationRecords: [],
+            processedGroups: [],
+            todoListId,
+          } as GroupReplaceResultData & { todoListId: string },
+        }
+      }
+
       const operationRecords: GroupOperationRecord[] = []
       let processedCount = 0
       let successCount = 0
       let failureCount = 0
 
-      for (const [pluginId, operations] of Object.entries(pluginResults)) {
+      // 遍历每个插件并执行
+      for (const pluginItem of todoList.items) {
+        // 检查是否请求停止
+        if (this.checkStopRequested()) {
+          console.log('🛑 检测到停止请求，终止群码替换执行')
+          // 停止自动保存
+          todoListManager.stopAutoSave()
+          // 关闭浏览器
+          await this.forceCloseBrowser()
+          return {
+            success: false,
+            message: '用户请求停止，群码替换已中断',
+            data: {
+              searchKeyword,
+              processedCount,
+              successCount,
+              failureCount,
+              executionTime: Date.now() - startTime,
+              operationRecords,
+              processedGroups: [],
+              todoListId,
+            } as GroupReplaceResultData & { todoListId: string },
+          }
+        }
+
         try {
-          console.log(`\n=== 处理插件 ${pluginId} (${operations.length} 个操作) ===`)
-          const result = await this.processPluginOperations(page, pluginId, operations)
+          // 执行单个插件任务
+          const pluginResult = await this.executePluginTask(pluginItem.pluginId, todoListId)
 
-          operationRecords.push(...result.records)
-          processedCount += result.processed
-          successCount += result.success
-          failureCount += result.failures
-
-          console.log(`插件 ${pluginId} 处理完成: 成功 ${result.success}, 失败 ${result.failures}`)
+          if (pluginResult.success && pluginResult.data) {
+            operationRecords.push(...pluginResult.data.operationRecords)
+            processedCount += pluginResult.data.processedCount
+            successCount += pluginResult.data.successCount
+            failureCount += pluginResult.data.failureCount
+          } else {
+            // 插件执行失败，统计所有操作为失败
+            failureCount += pluginItem.operationRecords?.length || 0
+            console.error(`插件 ${pluginItem.pluginId} 执行失败: ${pluginResult.message}`)
+          }
         } catch (error) {
-          console.error(`处理插件 ${pluginId} 失败:`, error)
-          failureCount += operations.length
-
-          // 为该插件的所有操作标记失败
-          operationRecords.push(
-            ...operations.map((op) => ({
-              ...op,
-              success: false,
-              error: error instanceof Error ? error.message : '插件处理失败',
-            })),
-          )
+          console.error(`执行插件 ${pluginItem.pluginId} 异常:`, error)
+          failureCount += pluginItem.operationRecords?.length || 0
         }
       }
 
@@ -982,6 +1345,16 @@ export class WeworkManager extends BaseManager {
       const executionTime = Date.now() - startTime
       console.log('\n=== 群码替换完成 ===')
       console.log(`耗时: ${executionTime}ms`)
+
+      // 停止自动保存
+      todoListManager.stopAutoSave()
+
+      // 最终保存TodoList
+      const finalTodoList = await todoListManager.loadTodoList(todoListId)
+      if (finalTodoList) {
+        finalTodoList.status = TodoStatus.COMPLETED
+        await todoListManager.saveTodoList(finalTodoList)
+      }
 
       // 任务完成，关闭浏览器
       console.log('群码替换任务完成，关闭浏览器...')
@@ -999,13 +1372,14 @@ export class WeworkManager extends BaseManager {
           executionTime,
           operationRecords,
           processedGroups: [],
-        } as GroupReplaceResultData,
+          todoListId,
+        } as GroupReplaceResultData & { todoListId: string },
       }
     } catch (error) {
       const executionTime = Date.now() - startTime
       console.error('群码替换失败:', error)
 
-      // 任务失败，也要关闭浏览器
+      // 任务失败，关闭浏览器
       console.log('群码替换任务失败，关闭浏览器...')
       try {
         await this.forceCloseBrowser()
@@ -1025,7 +1399,8 @@ export class WeworkManager extends BaseManager {
           executionTime,
           operationRecords: [],
           processedGroups: [],
-        } as GroupReplaceResultData,
+          todoListId: null,
+        } as GroupReplaceResultData & { todoListId: string | null },
       }
     }
   }
@@ -1672,75 +2047,15 @@ export class WeworkManager extends BaseManager {
     await this.wait(2000)
   }
 
-  /**
-   * 处理单个插件的所有操作
-   * @param page 页面实例
-   * @param pluginId 插件ID
-   * @param operations 操作记录数组
-   */
-  private async processPluginOperations(
-    page: puppeteer.Page,
-    pluginId: string,
-    operations: GroupOperationRecord[],
-  ): Promise<{
-    processed: number
-    success: number
-    failures: number
-    records: GroupOperationRecord[]
-  }> {
-    try {
-      console.log(`开始处理插件 ${pluginId}`)
+  // 旧版本方法已删除，现在使用 processPluginOperationsWithoutStatusUpdate
 
-      // 1. 跳转到插件编辑页面
-      const editUrl = `https://work.weixin.qq.com/wework_admin/frame#chatGroup/edit/${pluginId}`
-      console.log(`跳转到插件编辑页面: ${editUrl}`)
+  // 旧版本方法已删除，直接使用新版本
 
-      await page.goto(editUrl, { waitUntil: 'networkidle2', timeout: 30000 })
-      await this.wait(3000) // 等待页面完全加载
+  // 旧版本方法已移除，使用下面的完整版本
 
-      // 2. 执行删除操作
-      const deleteResult = await this.deleteGroupsFromPlugin(page, operations)
+  // 所有旧版本方法已删除，现在使用下面的完整版本
 
-      // 3. 如果需要，执行新建群组操作（传入原始操作记录和删除结果）
-      const addResult = await this.addGroupsToPlugin(page, operations)
-
-      // 4. 保存插件变更
-      await this.savePluginChanges(page)
-
-      // 5. 合并操作结果
-      const allRecords = [...deleteResult.records, ...addResult.records]
-      const totalProcessed = deleteResult.processed + addResult.processed
-      const totalSuccess = deleteResult.success + addResult.success
-      const totalFailures = deleteResult.failures + addResult.failures
-
-      console.log(
-        `插件 ${pluginId} 处理完成: 总计 ${totalProcessed}, 成功 ${totalSuccess}, 失败 ${totalFailures}`,
-      )
-
-      return {
-        processed: totalProcessed,
-        success: totalSuccess,
-        failures: totalFailures,
-        records: allRecords,
-      }
-    } catch (error) {
-      console.error(`处理插件 ${pluginId} 时发生错误:`, error)
-
-      // 将所有操作标记为失败
-      const failedRecords = operations.map((op) => ({
-        ...op,
-        success: false,
-        error: error instanceof Error ? error.message : '插件处理失败',
-      }))
-
-      return {
-        processed: operations.length,
-        success: 0,
-        failures: operations.length,
-        records: failedRecords,
-      }
-    }
-  }
+  // 中间的旧代码已全部删除，现在直接使用完整的新版本方法
 
   /**
    * 从插件中删除指定的群组
@@ -2088,6 +2403,581 @@ export class WeworkManager extends BaseManager {
     } catch (error) {
       console.error('获取群聊详细信息时发生错误:', error)
       return null
+    }
+  }
+
+  /**
+   * 处理单个插件的所有操作（集成TodoList状态更新）
+   * @param page 页面实例
+   * @param pluginId 插件ID
+   * @param operations 操作记录数组
+   * @param todoListId TodoList ID
+   * @param todoListManager TodoList管理器
+   */
+  private async processPluginOperationsWithTodoList(
+    page: puppeteer.Page,
+    pluginId: string,
+    operations: GroupOperationRecord[],
+    todoListId: string,
+    todoListManager: TodoListManager,
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    try {
+      console.log(`开始处理插件 ${pluginId}`)
+
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log(`🛑 检测到停止请求，跳过插件 ${pluginId} 的处理`)
+        throw new Error('用户请求停止')
+      }
+
+      // 1. 跳转到插件编辑页面
+      const editUrl = `https://work.weixin.qq.com/wework_admin/frame#chatGroup/edit/${pluginId}`
+      console.log(`跳转到插件编辑页面: ${editUrl}`)
+
+      await page.goto(editUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+      await this.wait(3000) // 等待页面完全加载
+
+      // 2. 执行删除操作
+      const deleteResult = await this.deleteGroupsFromPluginWithTodoList(
+        page,
+        operations,
+        todoListId,
+        todoListManager,
+      )
+
+      // 3. 如果需要，执行新建群组操作
+      const addResult = await this.addGroupsToPluginWithTodoList(
+        page,
+        operations,
+        todoListId,
+        todoListManager,
+      )
+
+      // 4. 保存插件变更
+      await this.savePluginChanges(page)
+
+      // 5. 合并操作结果
+      const allRecords = [...deleteResult.records, ...addResult.records]
+      const totalProcessed = deleteResult.processed + addResult.processed
+      const totalSuccess = deleteResult.success + addResult.success
+      const totalFailures = deleteResult.failures + addResult.failures
+
+      console.log(
+        `插件 ${pluginId} 处理完成: 总计 ${totalProcessed}, 成功 ${totalSuccess}, 失败 ${totalFailures}`,
+      )
+
+      return {
+        processed: totalProcessed,
+        success: totalSuccess,
+        failures: totalFailures,
+        records: allRecords,
+      }
+    } catch (error) {
+      console.error(`处理插件 ${pluginId} 时发生错误:`, error)
+
+      // 将所有操作标记为失败，并更新TodoList状态
+      const failedRecords = operations.map((op) => ({
+        ...op,
+        success: false,
+        error: error instanceof Error ? error.message : '插件处理失败',
+      }))
+
+      // 更新TodoList中对应的TodoItem状态
+      for (const record of failedRecords) {
+        const todoList = await todoListManager.loadTodoList(todoListId)
+        if (todoList) {
+          // 找到包含该操作记录的插件和操作
+          let targetItem: any = null
+          let targetOperation: any = null
+
+          for (const item of todoList.items) {
+            // 旧版本逻辑，现在跳过操作查找
+            const operation = null
+            if (operation) {
+              targetItem = item
+              targetOperation = operation
+              break
+            }
+          }
+        }
+      }
+
+      return {
+        processed: operations.length,
+        success: 0,
+        failures: operations.length,
+        records: failedRecords,
+      }
+    }
+  }
+
+  /**
+   * 从插件中删除指定的群组（集成TodoList状态更新）
+   */
+  private async deleteGroupsFromPluginWithTodoList(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+    todoListId: string,
+    todoListManager: TodoListManager,
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    // 检查是否请求停止
+    if (this.checkStopRequested()) {
+      console.log('🛑 检测到停止请求，跳过删除群组操作')
+      throw new Error('用户请求停止')
+    }
+
+    const groupsToDelete = operations.filter(
+      (op) =>
+        op.operationType === GroupOperationType.DELETE_BY_KEYWORD ||
+        op.operationType === GroupOperationType.DELETE_BY_MEMBER_COUNT,
+    )
+
+    if (groupsToDelete.length === 0) {
+      console.log('无需删除的群组')
+      return {
+        processed: 0,
+        success: 0,
+        failures: 0,
+        records: [],
+      }
+    }
+
+    const groupContainer =
+      '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(1) > div.csPlugin_mod_item_content > div.csPlugin_mod_chatGroups.js_chatGroup_groupList'
+
+    console.log(`开始删除 ${groupsToDelete.length} 个群组`)
+
+    const results: GroupOperationRecord[] = []
+    let successCount = 0
+    let failureCount = 0
+
+    // 等待群组容器加载
+    try {
+      await this.waitForElement(page, groupContainer, 10000, '群组容器')
+    } catch (error) {
+      console.error('群组容器加载失败:', error)
+
+      return {
+        processed: groupsToDelete.length,
+        success: 0,
+        failures: groupsToDelete.length,
+        records: groupsToDelete.map((op) => ({
+          ...op,
+          success: false,
+          error: '群组容器加载失败',
+        })),
+      }
+    }
+
+    for (const operation of groupsToDelete) {
+      // 在每个群组操作前检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log('🛑 检测到停止请求，终止删除群组循环')
+        break
+      }
+
+      const { groupInfo } = operation
+      const { roomId, title } = groupInfo
+
+      try {
+        console.log(`删除群组: ${title} (roomId: ${roomId})`)
+
+        if (!roomId) {
+          throw new Error('缺少群组roomId')
+        }
+
+        // 构建选择器：在群组容器中查找具有指定data-roomid的元素，然后找删除按钮
+        const deleteButtonSelector = `${groupContainer} > div[data-roomid="${roomId}"] > i`
+
+        // 复用base中的waitAndClick方法
+        await this.waitAndClick(page, deleteButtonSelector, 10000, `群组 ${title} 删除按钮`)
+
+        // 等待删除操作完成
+        await this.wait(1000)
+
+        // 复用base中的方法验证群组是否已被删除
+        const isDeleted = await this.waitForSelectorDisappear(page, deleteButtonSelector, 2000)
+        if (isDeleted) {
+          console.log(`✓ 群组 ${title} 删除成功`)
+        } else {
+          console.warn(`群组 ${title} 可能未完全删除`)
+        }
+
+        const successRecord = {
+          ...operation,
+          success: true,
+        }
+        results.push(successRecord)
+        successCount++
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '删除失败'
+        console.error(`删除群组 ${title} 失败:`, errorMessage)
+
+        const failureRecord = {
+          ...operation,
+          success: false,
+          error: errorMessage,
+        }
+        results.push(failureRecord)
+        failureCount++
+      }
+    }
+
+    console.log(`群组删除完成: 成功 ${successCount}, 失败 ${failureCount}`)
+
+    return {
+      processed: groupsToDelete.length,
+      success: successCount,
+      failures: failureCount,
+      records: results,
+    }
+  }
+
+  /**
+   * 向插件添加新群组（集成TodoList状态更新） - 已废弃
+   */
+  private async addGroupsToPluginWithTodoList(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+    todoListId: string,
+    todoListManager: TodoListManager,
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    // 检查是否请求停止
+    if (this.checkStopRequested()) {
+      console.log('🛑 检测到停止请求，跳过添加群组操作')
+      throw new Error('用户请求停止')
+    }
+
+    // 找到需要新建群组的操作（CREATE_NEW 类型）
+    const createOperations = operations.filter(
+      (op) => op.operationType === GroupOperationType.CREATE_NEW,
+    )
+
+    if (createOperations.length === 0) {
+      console.log('无需新建群组')
+      return {
+        processed: 0,
+        success: 0,
+        failures: 0,
+        records: [],
+      }
+    }
+
+    console.log(`开始新建群组，创建操作数: ${createOperations.length}`)
+
+    // 由于一个插件只有一个创建操作，直接处理第一个
+    const operation = createOperations[0]
+    const { groupInfo } = operation
+
+    // 从创建操作的groupInfo中获取群名和群主信息
+    const groupTitle = groupInfo.title
+    const adminName = this.extractAdminName(groupInfo.adminInfo)
+
+    console.log(`执行创建操作: 群名 "${groupTitle}", 群主: ${adminName}`)
+
+    try {
+      // 复用现有的新建群聊逻辑
+      await this.modifyAndCreateGroupChat(page, groupTitle, adminName)
+
+      const successRecord: GroupOperationRecord = {
+        groupInfo,
+        operationType: GroupOperationType.CREATE_NEW,
+        reason: `成功新建群组 "${groupTitle}"`,
+        success: true,
+      }
+
+      console.log(`✓ 新群组 "${groupTitle}" 创建成功`)
+
+      return {
+        processed: 1,
+        success: 1,
+        failures: 0,
+        records: [successRecord],
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '新建群组失败'
+      console.error(`新建群组失败:`, errorMessage)
+
+      const failureRecord: GroupOperationRecord = {
+        groupInfo,
+        operationType: GroupOperationType.CREATE_NEW,
+        reason: `新建群组失败: ${errorMessage}`,
+        success: false,
+        error: errorMessage,
+      }
+
+      return {
+        processed: 1,
+        success: 0,
+        failures: 1,
+        records: [failureRecord],
+      }
+    }
+  }
+
+  private async processPluginOperationsWithoutStatusUpdate(
+    page: puppeteer.Page,
+    pluginId: string,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+  }> {
+    try {
+      console.log(`开始处理插件 ${pluginId}`)
+
+      // 检查是否请求停止
+      if (this.checkStopRequested()) {
+        console.log(`🛑 检测到停止请求，跳过插件 ${pluginId} 的处理`)
+        throw new Error('用户请求停止')
+      }
+
+      // 1. 跳转到插件编辑页面
+      const editUrl = `https://work.weixin.qq.com/wework_admin/frame#chatGroup/edit/${pluginId}`
+      console.log(`跳转到插件编辑页面: ${editUrl}`)
+
+      await page.goto(editUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+      await this.wait(3000) // 等待页面完全加载
+
+      // 2. 执行删除操作 - 快速失败检查
+      console.log(`🔄 开始执行删除操作...`)
+      const deleteResult = await this.deleteGroupsFromPluginWithoutStatusUpdate(page, operations)
+
+      // 检查是否需要快速失败（关键操作失败）
+      if (deleteResult.criticalFailure) {
+        console.log(`❌ 删除操作遇到致命错误，终止插件任务: ${deleteResult.criticalError}`)
+        throw new Error(`关键操作失败: ${deleteResult.criticalError}`)
+      }
+
+      // 3. 如果需要，执行新建群组操作 - 快速失败检查
+      console.log(`🔄 开始执行添加操作...`)
+      const addResult = await this.addGroupsToPluginWithoutStatusUpdate(page, operations)
+
+      // 检查是否需要快速失败（关键操作失败）
+      if (addResult.criticalFailure) {
+        console.log(`❌ 添加操作遇到致命错误，终止插件任务: ${addResult.criticalError}`)
+        throw new Error(`关键操作失败: ${addResult.criticalError}`)
+      }
+
+      // 4. 保存插件变更 - 关键步骤，失败应终止
+      console.log(`🔄 开始保存插件变更...`)
+      try {
+        await this.savePluginChanges(page)
+        console.log(`✅ 插件变更保存成功`)
+      } catch (saveError) {
+        console.log(`❌ 保存插件变更失败，终止任务: ${saveError}`)
+        throw new Error(
+          `保存插件失败: ${saveError instanceof Error ? saveError.message : '未知错误'}`,
+        )
+      }
+
+      // 5. 合并操作结果
+      const allRecords = [...deleteResult.records, ...addResult.records]
+      const totalProcessed = deleteResult.processed + addResult.processed
+      const totalSuccess = deleteResult.success + addResult.success
+      const totalFailures = deleteResult.failures + addResult.failures
+
+      console.log(
+        `插件 ${pluginId} 处理完成: 总计 ${totalProcessed}, 成功 ${totalSuccess}, 失败 ${totalFailures}`,
+      )
+
+      return {
+        processed: totalProcessed,
+        success: totalSuccess,
+        failures: totalFailures,
+        records: allRecords,
+      }
+    } catch (error) {
+      console.error(`处理插件 ${pluginId} 时发生错误:`, error)
+
+      // 将所有操作标记为失败并返回
+      const failedRecords = operations.map((op) => ({
+        ...op,
+        success: false,
+        error: error instanceof Error ? error.message : '插件处理失败',
+      }))
+
+      return {
+        processed: operations.length,
+        success: 0,
+        failures: operations.length,
+        records: failedRecords,
+      }
+    }
+  }
+
+  /**
+   * 简化版删除群组操作 - 不更新状态
+   */
+  private async deleteGroupsFromPluginWithoutStatusUpdate(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+    criticalFailure?: boolean
+    criticalError?: string
+  }> {
+    const deleteOperations = operations.filter(
+      (op) => op.operationType === GroupOperationType.DELETE_BY_MEMBER_COUNT,
+    )
+
+    if (deleteOperations.length === 0) {
+      console.log('无需删除群组')
+      return { processed: 0, success: 0, failures: 0, records: [], criticalFailure: false }
+    }
+
+    console.log(`开始删除 ${deleteOperations.length} 个群组`)
+
+    const groupContainer =
+      '#js_csPlugin_index_create_wrap > div.csPlugin_mod_main > div:nth-child(1) > div.csPlugin_mod_item_content > div.csPlugin_mod_chatGroups.js_chatGroup_groupList'
+
+    // 关键操作：等待群组容器，失败则为致命错误
+    try {
+      await this.waitForElement(page, groupContainer, 10000, '群组容器')
+    } catch (containerError) {
+      console.error(`❌ 致命错误 - 无法找到群组容器:`, containerError)
+      return {
+        processed: deleteOperations.length,
+        success: 0,
+        failures: deleteOperations.length,
+        records: [],
+        criticalFailure: true,
+        criticalError: `无法找到群组容器: ${containerError instanceof Error ? containerError.message : '未知错误'}`,
+      }
+    }
+
+    const results: GroupOperationRecord[] = []
+    let successCount = 0
+    let failureCount = 0
+
+    for (const operation of deleteOperations) {
+      try {
+        const { roomId, title } = operation.groupInfo
+        console.log(`删除群组: ${title} (roomId: ${roomId})`)
+
+        const deleteButtonSelector = `${groupContainer} > div[data-roomid="${roomId}"] > i`
+
+        try {
+          await this.waitForElement(page, deleteButtonSelector, 2000, `群组 ${title} 删除按钮`)
+          await page.click(deleteButtonSelector)
+          console.log(`✓ 群组 ${title} 删除成功`)
+
+          results.push({
+            ...operation,
+            success: true,
+          })
+          successCount++
+        } catch (clickError) {
+          console.log(`✗ 群组 ${title} 删除按钮未找到或点击失败`)
+          results.push({
+            ...operation,
+            success: false,
+            error: '删除按钮未找到或点击失败',
+          })
+          failureCount++
+        }
+      } catch (error) {
+        console.error(`删除群组失败:`, error)
+        results.push({
+          ...operation,
+          success: false,
+          error: error instanceof Error ? error.message : '删除失败',
+        })
+        failureCount++
+      }
+    }
+
+    console.log(`群组删除完成: 成功 ${successCount}, 失败 ${failureCount}`)
+    return {
+      processed: deleteOperations.length,
+      success: successCount,
+      failures: failureCount,
+      records: results,
+      criticalFailure: false,
+    }
+  }
+
+  /**
+   * 简化版添加群组操作 - 不更新状态
+   */
+  private async addGroupsToPluginWithoutStatusUpdate(
+    page: puppeteer.Page,
+    operations: GroupOperationRecord[],
+  ): Promise<{
+    processed: number
+    success: number
+    failures: number
+    records: GroupOperationRecord[]
+    criticalFailure?: boolean
+    criticalError?: string
+  }> {
+    const addOperations = operations.filter(
+      (op) => op.operationType === GroupOperationType.CREATE_NEW,
+    )
+
+    if (addOperations.length === 0) {
+      console.log('无需创建新群组')
+      return { processed: 0, success: 0, failures: 0, records: [], criticalFailure: false }
+    }
+
+    console.log(`开始新建群组，创建操作数: ${addOperations.length}`)
+
+    const results: GroupOperationRecord[] = []
+    let successCount = 0
+    let failureCount = 0
+
+    for (const operation of addOperations) {
+      try {
+        const { title: groupTitle, adminInfo: adminName } = operation.groupInfo
+        console.log(`执行创建操作: 群名 "${groupTitle}", 群主: ${adminName}`)
+
+        await this.modifyAndCreateGroupChat(page, groupTitle, adminName)
+
+        console.log(`✓ 新群组 "${groupTitle}" 创建成功`)
+
+        results.push({
+          ...operation,
+          success: true,
+        })
+        successCount++
+      } catch (error) {
+        console.error(`创建群组失败:`, error)
+        results.push({
+          ...operation,
+          success: false,
+          error: error instanceof Error ? error.message : '创建失败',
+        })
+        failureCount++
+      }
+    }
+
+    console.log(`群组创建完成: 成功 ${successCount}, 失败 ${failureCount}`)
+    return {
+      processed: addOperations.length,
+      success: successCount,
+      failures: failureCount,
+      records: results,
+      criticalFailure: false,
     }
   }
 }

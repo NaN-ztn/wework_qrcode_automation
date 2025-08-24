@@ -425,14 +425,14 @@ export class WeibanManager extends BaseManager {
       // 填写链接标题
       const linkTitleSelector =
         'body > div:nth-child(12) > section > div > div.ame-modal-content > div > section > div > section:nth-child(2) > div > div.ame-form-item-content > span > input'
-      const linkTitle = `邻家优选${qrCodeName}`
+      const linkTitle = qrCodeName.length > 8 ? qrCodeName : `邻家优选${qrCodeName}`
       await this.waitAndFill(page, linkTitleSelector, linkTitle, 15000, '链接标题输入框')
       await this.wait(1000)
 
       // 填写链接描述
       const linkDescSelector =
         'body > div:nth-child(12) > section > div > div.ame-modal-content > div > section > div > section:nth-child(3) > div > div.ame-form-item-content > span > input'
-      const linkDescription = `邻家优选${qrCodeName}`
+      const linkDescription = qrCodeName.length > 8 ? qrCodeName : `邻家优选${qrCodeName}`
       await this.waitAndFill(page, linkDescSelector, linkDescription, 15000, '链接描述输入框')
       await this.wait(2000)
 

@@ -80,3 +80,120 @@ export interface GroupReplaceResultData {
   /** 操作记录列表 */
   operationRecords: GroupOperationRecord[]
 }
+
+/**
+ * TodoList任务状态
+ */
+export enum TodoStatus {
+  /** 待执行 */
+  PENDING = 'pending',
+  /** 执行中 */
+  IN_PROGRESS = 'in_progress',
+  /** 已完成 */
+  COMPLETED = 'completed',
+  /** 执行失败 */
+  FAILED = 'failed',
+  /** 已跳过 */
+  SKIPPED = 'skipped',
+}
+
+/**
+ * TodoList任务项（插件维度）
+ */
+export interface TodoItem {
+  /** 唯一标识符 */
+  id: string
+  /** 插件ID */
+  pluginId: string
+  /** 插件名称 */
+  pluginName: string
+  /** 任务状态 */
+  status: TodoStatus
+  /** 关联的群组操作记录数组（用于统计，不用于状态管理） */
+  operationRecords?: GroupOperationRecord[]
+  /** 创建时间戳 */
+  createdAt: number
+  /** 开始执行时间戳 */
+  startedAt?: number
+  /** 完成时间戳 */
+  completedAt?: number
+  /** 错误信息 */
+  error?: string
+}
+
+/**
+ * TodoList配置
+ */
+export interface TodoListConfig {
+  /** 搜索关键词 */
+  searchKeyword?: string
+  /** 是否允许重试失败的任务 */
+  allowRetry: boolean
+  /** 默认最大重试次数 */
+  defaultMaxRetries: number
+  /** 自动保存间隔（毫秒） */
+  autoSaveInterval: number
+}
+
+/**
+ * TodoList数据结构
+ */
+export interface TodoList {
+  /** 任务列表ID */
+  id: string
+  /** 任务列表名称 */
+  name: string
+  /** 创建时间戳 */
+  createdAt: number
+  /** 最后更新时间戳 */
+  updatedAt: number
+  /** 配置信息 */
+  config: TodoListConfig
+  /** 任务项列表 */
+  items: TodoItem[]
+  /** 整体状态 */
+  status: TodoStatus
+  /** 进度信息 */
+  progress: {
+    total: number
+    completed: number
+    failed: number
+    pending: number
+    inProgress: number
+  }
+}
+
+/**
+ * TodoList执行选项
+ */
+export interface TodoListExecuteOptions {
+  /** 是否从指定任务开始执行（断点恢复） */
+  resumeFromItemId?: string
+  /** 是否跳过已完成的任务 */
+  skipCompleted?: boolean
+  /** 是否重试失败的任务 */
+  retryFailed?: boolean
+  /** 批量执行大小 */
+  batchSize?: number
+}
+
+/**
+ * TodoList执行结果
+ */
+export interface TodoListExecuteResult {
+  /** 是否成功 */
+  success: boolean
+  /** 结果消息 */
+  message: string
+  /** 执行统计 */
+  stats: {
+    totalItems: number
+    processedItems: number
+    successItems: number
+    failedItems: number
+    skippedItems: number
+    executionTime: number
+  }
+  /** 更新后的TodoList */
+  todoList?: TodoList
+}
