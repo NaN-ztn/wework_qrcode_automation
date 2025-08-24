@@ -107,6 +107,8 @@ export interface TodoItem {
   pluginId: string
   /** 插件名称 */
   pluginName: string
+  /** 插件备注信息（人类可读的描述） */
+  remarks?: string
   /** 任务状态 */
   status: TodoStatus
   /** 关联的群组操作记录数组（用于统计，不用于状态管理） */
@@ -131,8 +133,6 @@ export interface TodoListConfig {
   allowRetry: boolean
   /** 默认最大重试次数 */
   defaultMaxRetries: number
-  /** 自动保存间隔（毫秒） */
-  autoSaveInterval: number
 }
 
 /**
@@ -161,39 +161,4 @@ export interface TodoList {
     pending: number
     inProgress: number
   }
-}
-
-/**
- * TodoList执行选项
- */
-export interface TodoListExecuteOptions {
-  /** 是否从指定任务开始执行（断点恢复） */
-  resumeFromItemId?: string
-  /** 是否跳过已完成的任务 */
-  skipCompleted?: boolean
-  /** 是否重试失败的任务 */
-  retryFailed?: boolean
-  /** 批量执行大小 */
-  batchSize?: number
-}
-
-/**
- * TodoList执行结果
- */
-export interface TodoListExecuteResult {
-  /** 是否成功 */
-  success: boolean
-  /** 结果消息 */
-  message: string
-  /** 执行统计 */
-  stats: {
-    totalItems: number
-    processedItems: number
-    successItems: number
-    failedItems: number
-    skippedItems: number
-    executionTime: number
-  }
-  /** 更新后的TodoList */
-  todoList?: TodoList
 }

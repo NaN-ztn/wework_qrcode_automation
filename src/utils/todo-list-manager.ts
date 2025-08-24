@@ -6,7 +6,6 @@ import { ConfigManager } from './config-manager'
 export class TodoListManager {
   private static instance: TodoListManager
   private todoListStoragePath: string
-  private autoSaveTimer: NodeJS.Timeout | null = null
 
   constructor() {
     const config = ConfigManager.loadConfig()
@@ -42,6 +41,7 @@ export class TodoListManager {
   public async createTodoListFromGroupReplace(
     searchKeyword: string,
     collectGroupsResult: CollectGroupsResult,
+    pluginMetadata?: Record<string, { remarks?: string }>,
   ): Promise<TodoList> {
     const now = Date.now()
     const todoListId = `group-replace-${searchKeyword}-${now}`
@@ -51,7 +51,6 @@ export class TodoListManager {
       searchKeyword,
       allowRetry: true,
       defaultMaxRetries: 3,
-      autoSaveInterval: 30000, // 30秒自动保存
     }
 
     // 按插件维度组织TodoItem
@@ -61,11 +60,16 @@ export class TodoListManager {
     for (const [pluginId, operationRecords] of Object.entries(collectGroupsResult)) {
       if (operationRecords.length === 0) continue
 
+      // 从插件元数据获取remarks信息
+      const pluginRemarks = pluginMetadata?.[pluginId]?.remarks
+      const displayName = pluginRemarks || this.getPluginDisplayName(pluginId)
+
       // 创建简化的插件级别的TodoItem
       const item: TodoItem = {
         id: `${todoListId}-plugin-${itemIdCounter++}`,
         pluginId,
-        pluginName: this.getPluginDisplayName(pluginId),
+        pluginName: displayName,
+        remarks: pluginRemarks,
         status: TodoStatus.PENDING,
         operationRecords, // 仅用于统计，不参与状态管理
         createdAt: now,
@@ -108,14 +112,6 @@ export class TodoListManager {
       default: '默认处理',
     }
     return pluginNames[pluginId] || pluginId
-  }
-
-  /**
-   * 更新插件状态（简化版，不依赖操作状态）
-   */
-  private updatePluginStatus(item: TodoItem): void {
-    console.log(`🔧 插件 ${item.pluginId} 状态保持为: ${item.status}`)
-    // 插件状态现在直接由外部设置，不基于内部操作计算
   }
 
   /**
@@ -324,26 +320,6 @@ export class TodoListManager {
   }
 
   /**
-   * 获取待执行的TodoItem列表
-   */
-  public async getPendingItems(todoListId: string): Promise<TodoItem[]> {
-    const todoList = await this.loadTodoList(todoListId)
-    if (!todoList) return []
-
-    return todoList.items.filter((item) => item.status === TodoStatus.PENDING)
-  }
-
-  /**
-   * 获取失败的TodoItem列表
-   */
-  public async getFailedItems(todoListId: string): Promise<TodoItem[]> {
-    const todoList = await this.loadTodoList(todoListId)
-    if (!todoList) return []
-
-    return todoList.items.filter((item) => item.status === TodoStatus.FAILED)
-  }
-
-  /**
    * 获取可重试的插件列表（失败状态的插件）
    */
   public async getRetryablePlugins(todoListId: string): Promise<TodoItem[]> {
@@ -405,33 +381,5 @@ export class TodoListManager {
    */
   private getTodoListFilePath(todoListId: string): string {
     return path.join(this.todoListStoragePath, `${todoListId}.json`)
-  }
-
-  /**
-   * 启动自动保存
-   */
-  public startAutoSave(todoList: TodoList): void {
-    if (this.autoSaveTimer) {
-      clearInterval(this.autoSaveTimer)
-    }
-
-    this.autoSaveTimer = setInterval(async () => {
-      try {
-        await this.saveTodoList(todoList)
-        console.log(`自动保存TodoList: ${todoList.id}`)
-      } catch (error) {
-        console.error('自动保存TodoList失败:', error)
-      }
-    }, todoList.config.autoSaveInterval)
-  }
-
-  /**
-   * 停止自动保存
-   */
-  public stopAutoSave(): void {
-    if (this.autoSaveTimer) {
-      clearInterval(this.autoSaveTimer)
-      this.autoSaveTimer = null
-    }
   }
 }

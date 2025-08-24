@@ -1379,11 +1379,18 @@ class RendererApp {
       }
     } catch (error) {
       this.addGroupReplaceLog(`💥 群码替换任务异常: ${error}`, 'error')
+
+      // 确保异常时也重置停止标识，避免状态残留
+      this.isGroupReplaceStopRequested = false
+      console.log('💥 异常情况下重置渲染进程停止标识')
     } finally {
-      // 恢复运行状态
+      // 统一的状态恢复机制
       this.isGroupReplaceRunning = false
       this.validateGroupReplaceForm() // 重新验证表单以更新按钮状态
       this.updateTodoListButtons() // 更新TodoList按钮状态
+
+      // 确保按钮状态完全恢复
+      console.log('✅ 群码替换任务结束，按钮状态已恢复')
     }
   }
 
@@ -1576,7 +1583,7 @@ class RendererApp {
       <div class="plugin-item-header" onclick="this.parentElement.classList.toggle('expanded')">
         <div class="plugin-item-main">
           <span class="status-icon">${statusIcon}</span>
-          <h5 class="plugin-item-title">${item.pluginName} (${item.pluginId})</h5>
+          <h5 class="plugin-item-title">${item.pluginName}</h5>
           <span class="plugin-item-status ${item.status}">${this.getStatusText(item.status)}</span>
           <span class="expand-icon">📂</span>
         </div>
@@ -1591,6 +1598,7 @@ class RendererApp {
           <p>插件包含 ${item.operationRecords?.length || 0} 个群组操作记录</p>
           ${item.error ? `<div class="plugin-error">错误信息: ${item.error}</div>` : ''}
         </div>
+        ${this.renderOperationRecords(item.operationRecords || [])}
       </div>
     `
 
@@ -1646,6 +1654,58 @@ class RendererApp {
   }
 
   /**
+   * 获取操作类型的中文描述和图标
+   */
+  private getOperationTypeDisplay(operationType: string): { icon: string; text: string } {
+    const operationTypes: Record<string, { icon: string; text: string }> = {
+      delete_by_member_count: { icon: '🗑️', text: '删除（成员超限）' },
+      delete_by_keyword: { icon: '🗑️', text: '删除（关键词匹配）' },
+      create_new: { icon: '➕', text: '创建新群' },
+      no_action: { icon: '⏸️', text: '无需操作' },
+    }
+    return operationTypes[operationType] || { icon: '❓', text: '未知操作' }
+  }
+
+  /**
+   * 渲染操作记录列表
+   */
+  private renderOperationRecords(operationRecords: any[]): string {
+    if (!operationRecords || operationRecords.length === 0) {
+      return '<div class="no-operations">暂无操作记录</div>'
+    }
+
+    const recordsHtml = operationRecords
+      .map((record) => {
+        const { icon, text } = this.getOperationTypeDisplay(record.operationType)
+        const groupName = record.groupInfo?.title || '未知群组'
+        const reason = record.reason || '无详细原因'
+
+        return `
+          <div class="operation-record">
+            <div class="operation-header">
+              <span class="operation-icon">${icon}</span>
+              <span class="operation-type">${text}</span>
+            </div>
+            <div class="operation-details">
+              <div class="group-name">${groupName}</div>
+              <div class="operation-reason">${reason}</div>
+            </div>
+          </div>
+        `
+      })
+      .join('')
+
+    return `
+      <div class="operation-records-container">
+        <h6 class="operation-records-title">操作记录详情</h6>
+        <div class="operation-records-list">
+          ${recordsHtml}
+        </div>
+      </div>
+    `
+  }
+
+  /**
    * 格式化时间信息
    */
   private formatTimeInfo(item: any): string {
@@ -1690,6 +1750,18 @@ class RendererApp {
     // 设置按钮状态
     this.resumeTodoListBtn.disabled = !canResume || this.isGroupReplaceRunning
     this.deleteTodoListBtn.disabled = !hasSelected || this.isGroupReplaceRunning
+
+    // 更新接续执行按钮文本
+    if (this.isGroupReplaceRunning && canResume) {
+      this.resumeTodoListBtn.textContent = '执行中...'
+      this.resumeTodoListBtn.classList.add('running')
+    } else if (canResume) {
+      this.resumeTodoListBtn.textContent = '接续执行'
+      this.resumeTodoListBtn.classList.remove('running')
+    } else if (hasSelected) {
+      this.resumeTodoListBtn.textContent = '无需执行'
+      this.resumeTodoListBtn.classList.remove('running')
+    }
   }
 
   /**
@@ -1702,6 +1774,10 @@ class RendererApp {
     }
 
     try {
+      // 重置渲染进程层的停止标识，确保接续执行不受之前停止状态影响
+      this.isGroupReplaceStopRequested = false
+      console.log('🔄 渲染进程层停止标识已重置，准备接续执行')
+
       this.isGroupReplaceRunning = true
       this.updateTodoListButtons()
       this.validateGroupReplaceForm()
@@ -1728,10 +1804,18 @@ class RendererApp {
       }
     } catch (error) {
       this.addGroupReplaceLog(`💥 TodoList接续执行异常: ${error}`, 'error')
+
+      // 确保异常时也重置停止标识，避免状态残留
+      this.isGroupReplaceStopRequested = false
+      console.log('💥 异常情况下重置渲染进程停止标识')
     } finally {
+      // 统一的状态恢复机制
       this.isGroupReplaceRunning = false
       this.updateTodoListButtons()
       this.validateGroupReplaceForm()
+
+      // 确保按钮状态完全恢复
+      console.log('✅ 接续执行结束，按钮状态已恢复')
     }
   }
 
@@ -1819,7 +1903,8 @@ class RendererApp {
     // 监听单个插件开始执行事件
     window.electronAPI.onPluginTaskStarted((data: { pluginId: string; todoListId: string }) => {
       console.log('收到插件开始执行通知:', data)
-      this.addGroupReplaceLog(`🔄 开始执行插件: ${data.pluginId}`, 'info')
+      const pluginDisplayName = this.getPluginDisplayName(data.pluginId)
+      this.addGroupReplaceLog(`🔄 开始执行插件: ${pluginDisplayName}`, 'info')
 
       // 更新TodoList显示，标记插件为进行中状态
       this.updatePluginStatus(data.pluginId, 'in_progress')
@@ -1830,8 +1915,9 @@ class RendererApp {
       async (data: { pluginId: string; todoListId: string; data: any }) => {
         console.log('收到插件执行完成通知:', data)
         const { processedCount, successCount, failureCount } = data.data
+        const pluginDisplayName = this.getPluginDisplayName(data.pluginId)
         this.addGroupReplaceLog(
-          `✅ 插件执行完成: ${data.pluginId} - 成功 ${successCount}, 失败 ${failureCount}`,
+          `✅ 插件执行完成: ${pluginDisplayName} - 成功 ${successCount}, 失败 ${failureCount}`,
           'success',
         )
 
@@ -1852,7 +1938,8 @@ class RendererApp {
     window.electronAPI.onPluginTaskFailed(
       async (data: { pluginId: string; todoListId: string; error: string }) => {
         console.log('收到插件执行失败通知:', data)
-        this.addGroupReplaceLog(`❌ 插件执行失败: ${data.pluginId} - ${data.error}`, 'error')
+        const pluginDisplayName = this.getPluginDisplayName(data.pluginId)
+        this.addGroupReplaceLog(`❌ 插件执行失败: ${pluginDisplayName} - ${data.error}`, 'error')
 
         // 先刷新TodoList详情显示，从文件重新加载最新状态
         if (this.currentTodoList && this.currentTodoList.id === data.todoListId) {
@@ -1871,7 +1958,8 @@ class RendererApp {
     window.electronAPI.onPluginStatusUpdate(
       async (data: { pluginId: string; todoListId: string; status: string; timestamp: number }) => {
         console.log('收到插件状态更新通知:', data)
-        this.addGroupReplaceLog(`🔄 插件状态更新: ${data.pluginId} -> ${data.status}`, 'info')
+        const pluginDisplayName = this.getPluginDisplayName(data.pluginId)
+        this.addGroupReplaceLog(`🔄 插件状态更新: ${pluginDisplayName} -> ${data.status}`, 'info')
 
         // 实时更新UI显示
         console.log(`🎯 实时更新插件UI状态: ${data.pluginId} -> ${data.status}`)
@@ -1884,6 +1972,16 @@ class RendererApp {
         }
       },
     )
+  }
+
+  /**
+   * 获取插件的显示名称
+   */
+  private getPluginDisplayName(pluginId: string): string {
+    if (!this.currentTodoList) return pluginId
+
+    const item = this.currentTodoList.items?.find((item: any) => item.pluginId === pluginId)
+    return item?.pluginName || item?.remarks || pluginId
   }
 
   /**

@@ -221,9 +221,9 @@ class ElectronApp {
         },
       ) => {
         try {
-          // 重置停止标志，允许新任务执行
-          this.weworkManager.resetStopFlag()
-          console.log('🔄 已重置停止标志，准备执行主页任务')
+          // 重置三层停止标识，确保新任务不受之前停止状态影响
+          this.weworkManager.resetAllStopFlags()
+          console.log('🔄 已重置三层停止标识，准备执行主页任务')
 
           const qrCodePaths = {
             weworkQrPath: '',
@@ -685,9 +685,9 @@ class ElectronApp {
     // 群码替换功能（重构为分阶段执行）
     ipcMain.handle('execute-group-replace', async (_, options: any) => {
       try {
-        // 重置停止标志，允许新任务执行
-        this.weworkManager.resetStopFlag()
-        console.log('🔄 已重置停止标志，准备执行新任务')
+        // 重置三层停止标识，确保新任务不受之前停止状态影响
+        this.weworkManager.resetAllStopFlags()
+        console.log('🔄 已重置三层停止标识，准备执行新任务')
 
         console.log('=== 检查企微登录状态 ===')
         const weworkLoginResult = await this.weworkManager.checkWeWorkLogin()
@@ -812,6 +812,15 @@ class ElectronApp {
         return result
       } catch (error) {
         console.error('群码替换任务异常:', error)
+
+        // 异常情况下确保浏览器清理和状态重置
+        try {
+          await this.browserInstance.forceCloseBrowser()
+          console.log('💥 异常情况下已强制关闭浏览器')
+        } catch (closeError) {
+          console.error('强制关闭浏览器失败:', closeError)
+        }
+
         return {
           success: false,
           message: `群码替换任务异常: ${error instanceof Error ? error.message : '未知错误'}`,
@@ -943,6 +952,9 @@ class ElectronApp {
           console.log(`=== 接续执行TodoList: ${todoListId} ===`)
           console.log('执行选项:', options)
 
+          // 重置三层停止标识，确保接续执行不受之前的停止标识影响
+          this.weworkManager.resetAllStopFlags()
+
           const todoListManager = TodoListManager.getInstance()
 
           // 加载TodoList
@@ -1055,6 +1067,15 @@ class ElectronApp {
           }
         } catch (error) {
           console.error('接续执行TodoList失败:', error)
+
+          // 异常情况下确保浏览器清理和状态重置
+          try {
+            await this.browserInstance.forceCloseBrowser()
+            console.log('💥 异常情况下已强制关闭浏览器')
+          } catch (closeError) {
+            console.error('强制关闭浏览器失败:', closeError)
+          }
+
           return {
             success: false,
             message: `接续执行TodoList失败: ${error instanceof Error ? error.message : '未知错误'}`,
