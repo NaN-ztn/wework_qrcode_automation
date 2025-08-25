@@ -214,7 +214,7 @@ export class WeibanManager extends BaseManager {
       const addTagSelector =
         '#ame-page-content > section > div > section > div:nth-child(8) > div > div > section > button'
       await this.waitAndClick(page, addTagSelector, 15000, '添加标签按钮')
-      await this.wait(2000)
+      await this.wait(5000)
 
       // 智能标签选择逻辑：先搜索是否存在，不存在则创建
       const tagName = `${qrCodeName}活码新加`
@@ -599,15 +599,15 @@ export class WeibanManager extends BaseManager {
   }
 }
 
-// ;(async function () {
-//   const instance = WeibanManager.getInstance()
-//   await instance.checkWeibanLogin()
-//   await instance.createWeibanLiveCode({
-//     storeName: '楠子1店',
-//     storeType: '独立店',
-//     assistant: '王莹',
-//     qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
-//     qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
-//   })
-//   // await instance.forceCloseBrowser()
-// })()
+;(async function () {
+  const instance = WeibanManager.getInstance()
+  await instance.checkWeibanLogin()
+  await instance.createWeibanLiveCode({
+    storeName: '楠子1店',
+    storeType: '独立店',
+    assistant: '王莹',
+    qrCodeDir: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42',
+    qrCodePath: '/tmp/wework-automation/qr_code/楠子1店_2025_08_13_15_24_42/groupqrcode.png',
+  })
+  // await instance.forceCloseBrowser()
+})()
