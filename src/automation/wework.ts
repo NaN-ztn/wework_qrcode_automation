@@ -279,7 +279,9 @@ export class WeworkManager extends BaseManager {
       // 步骤4: 更新姓名
       console.log('步骤4: 更新用户姓名...')
       const processedStoreName =
-        this.processStoreName(param.storeName) + (param.storeType === '店中店' ? '店小二' : '')
+        this.processStoreName(param.storeName) +
+        (param.storeType === '店中店' ? '店小二' : '') +
+        param.mobile
       console.log(`处理后的门店名称: ${processedStoreName}`)
 
       const usernameInputXpath = '//*[@id="username"]'
