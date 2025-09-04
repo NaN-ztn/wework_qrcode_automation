@@ -225,36 +225,57 @@ class ElectronApp {
           this.weworkManager.resetAllStopFlags()
           console.log('🔄 已重置三层停止标识，准备执行主页任务')
 
+          // 创建任务状态
+          const { TaskStateManager } = await import('./utils/task-state-manager')
+          const taskStateManager = TaskStateManager.getInstance()
+          const taskState = await taskStateManager.createTaskState(storeData)
+          console.log(`✅ 任务状态已创建: ${taskState.id}`)
+
           const qrCodePaths = {
             weworkQrPath: '',
             weibanQrPath: '',
           }
 
           // 步骤1: 检查企微登录状态
+          await taskStateManager.updateStepStatus(1, 'running', '正在检查企微登录状态')
           this.sendStepUpdate(1, 'running', '检查企微登录状态')
           console.log('=== 步骤1: 检查企微登录状态 ===')
           const weworkLoginResult = await this.weworkManager.checkWeWorkLogin()
 
           if (!weworkLoginResult.success) {
+            await taskStateManager.updateStepStatus(
+              1,
+              'failed',
+              `企微登录检查失败: ${weworkLoginResult.message}`,
+            )
             this.sendStepUpdate(1, 'failed', `企微登录检查失败: ${weworkLoginResult.message}`)
             return weworkLoginResult
           }
 
+          await taskStateManager.updateStepStatus(1, 'completed', '企微登录检查成功')
           this.sendStepUpdate(1, 'completed', '企微登录检查成功')
 
           // 步骤2: 检查微伴登录状态
+          await taskStateManager.updateStepStatus(2, 'running', '正在检查微伴登录状态')
           this.sendStepUpdate(2, 'running', '检查微伴登录状态')
           console.log('=== 步骤2: 检查微伴登录状态 ===')
           const weibanLoginResult = await this.weibanManager.checkWeibanLogin()
 
           if (!weibanLoginResult.success) {
+            await taskStateManager.updateStepStatus(
+              2,
+              'failed',
+              `微伴登录检查失败: ${weibanLoginResult.message}`,
+            )
             this.sendStepUpdate(2, 'failed', `微伴登录检查失败: ${weibanLoginResult.message}`)
             return weibanLoginResult
           }
 
+          await taskStateManager.updateStepStatus(2, 'completed', '微伴登录检查成功')
           this.sendStepUpdate(2, 'completed', '微伴登录检查成功')
 
           // 步骤3: 更改企微通讯录名称
+          await taskStateManager.updateStepStatus(3, 'running', '正在更改企微通讯录名称')
           this.sendStepUpdate(3, 'running', '更改企微通讯录名称')
           console.log('=== 步骤3: 更改企微通讯录名称 ===')
           const changeResult = await this.weworkManager.changeContactInfo({
@@ -264,13 +285,20 @@ class ElectronApp {
           })
 
           if (!changeResult.success) {
+            await taskStateManager.updateStepStatus(
+              3,
+              'failed',
+              `通讯录名称更改失败: ${changeResult.message}`,
+            )
             this.sendStepUpdate(3, 'failed', `通讯录名称更改失败: ${changeResult.message}`)
             return changeResult
           }
 
+          await taskStateManager.updateStepStatus(3, 'completed', '通讯录名称更改成功')
           this.sendStepUpdate(3, 'completed', '通讯录名称更改成功')
 
           // 步骤4: 创建企业微信群码
+          await taskStateManager.updateStepStatus(4, 'running', '正在创建企业微信群码')
           this.sendStepUpdate(4, 'running', '创建企业微信群码')
           console.log('=== 步骤4: 创建企业微信群码 ===')
           const weworkQrResult = await this.weworkManager.createGroupLiveCode({
@@ -280,12 +308,18 @@ class ElectronApp {
           })
 
           if (!weworkQrResult.success) {
+            await taskStateManager.updateStepStatus(
+              4,
+              'failed',
+              `企微群码创建失败: ${weworkQrResult.message}`,
+            )
             this.sendStepUpdate(4, 'failed', `企微群码创建失败: ${weworkQrResult.message}`)
             return weworkQrResult
           }
 
           if (weworkQrResult.data?.qrCodePath) {
             qrCodePaths.weworkQrPath = weworkQrResult.data.qrCodePath
+            await taskStateManager.updateQrCodePaths({ weworkQrPath: qrCodePaths.weworkQrPath })
             // 立即发送企微二维码路径到渲染进程
             this.sendQrCodePaths({
               weworkQrPath: qrCodePaths.weworkQrPath,
@@ -293,15 +327,21 @@ class ElectronApp {
             })
           }
 
+          await taskStateManager.updateStepStatus(4, 'completed', '企微群码创建成功')
           this.sendStepUpdate(4, 'completed', '企微群码创建成功')
 
           // 步骤5: 创建微伴+v活码
+          await taskStateManager.updateStepStatus(5, 'running', '正在创建微伴+v活码')
           this.sendStepUpdate(5, 'running', '创建微伴+v活码')
           console.log('=== 步骤5: 创建微伴+v活码 ===')
-          const config = ConfigManager.loadConfig()
 
           // 确保企微群码已经生成
           if (!qrCodePaths.weworkQrPath) {
+            await taskStateManager.updateStepStatus(
+              5,
+              'failed',
+              '微伴活码创建失败: 企微群码尚未生成',
+            )
             this.sendStepUpdate(5, 'failed', '微伴活码创建失败: 企微群码尚未生成')
             return {
               success: false,
@@ -324,12 +364,18 @@ class ElectronApp {
           })
 
           if (!weibanQrResult.success) {
+            await taskStateManager.updateStepStatus(
+              5,
+              'failed',
+              `微伴活码创建失败: ${weibanQrResult.message}`,
+            )
             this.sendStepUpdate(5, 'failed', `微伴活码创建失败: ${weibanQrResult.message}`)
             return weibanQrResult
           }
 
           if (weibanQrResult.data?.qrCodePath) {
             qrCodePaths.weibanQrPath = weibanQrResult.data.qrCodePath
+            await taskStateManager.updateQrCodePaths({ weibanQrPath: qrCodePaths.weibanQrPath })
             // 立即发送微伴二维码路径到渲染进程
             this.sendQrCodePaths({
               weworkQrPath: qrCodePaths.weworkQrPath,
@@ -338,12 +384,14 @@ class ElectronApp {
           } else if (weibanQrResult.data?.weibanQrCodePath) {
             // 处理微伴返回的二维码路径字段可能不同的情况
             qrCodePaths.weibanQrPath = weibanQrResult.data.weibanQrCodePath
+            await taskStateManager.updateQrCodePaths({ weibanQrPath: qrCodePaths.weibanQrPath })
             this.sendQrCodePaths({
               weworkQrPath: qrCodePaths.weworkQrPath,
               weibanQrPath: qrCodePaths.weibanQrPath,
             })
           }
 
+          await taskStateManager.updateStepStatus(5, 'completed', '微伴活码创建成功')
           this.sendStepUpdate(5, 'completed', '微伴活码创建成功')
 
           // 最终再次发送完整的二维码路径信息
@@ -352,6 +400,10 @@ class ElectronApp {
           // 任务完成后关闭浏览器并恢复按钮状态
           console.log('=== 任务完成，关闭浏览器 ===')
           await this.browserInstance.forceCloseBrowser()
+
+          // 清除任务状态
+          await taskStateManager.clearTaskState()
+          console.log('✅ 任务状态已清除')
 
           // 通知渲染进程恢复按钮状态
           this.sendButtonStateUpdate('completed')
@@ -383,6 +435,9 @@ class ElectronApp {
 
           // 通知渲染进程恢复按钮状态
           this.sendButtonStateUpdate('failed')
+
+          // 通知渲染进程检查是否有未完成任务（用于显示继续执行按钮）
+          this.sendTaskStateUpdate()
 
           return {
             success: false,
@@ -1105,6 +1160,295 @@ class ElectronApp {
         }
       }
     })
+
+    // 任务状态管理相关IPC处理器
+    ipcMain.handle('get-current-task-state', async () => {
+      try {
+        const { TaskStateManager } = await import('./utils/task-state-manager')
+        const taskStateManager = TaskStateManager.getInstance()
+        const taskState = await taskStateManager.loadCurrentTaskState()
+
+        return {
+          success: true,
+          data: taskState,
+          message: taskState ? '任务状态获取成功' : '没有找到任务状态',
+        }
+      } catch (error) {
+        console.error('获取任务状态失败:', error)
+        return {
+          success: false,
+          message: `获取任务状态失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    ipcMain.handle('has-unfinished-task', async () => {
+      try {
+        const { TaskStateManager } = await import('./utils/task-state-manager')
+        const taskStateManager = TaskStateManager.getInstance()
+        const hasUnfinished = await taskStateManager.hasUnfinishedTask()
+
+        return hasUnfinished
+      } catch (error) {
+        console.error('检查未完成任务失败:', error)
+        return false
+      }
+    })
+
+    ipcMain.handle('continue-task-execution', async () => {
+      try {
+        console.log('=== 开始继续执行任务 ===')
+        const { TaskStateManager } = await import('./utils/task-state-manager')
+        const taskStateManager = TaskStateManager.getInstance()
+
+        // 加载当前任务状态
+        const taskState = await taskStateManager.loadCurrentTaskState()
+        if (!taskState) {
+          return {
+            success: false,
+            message: '没有找到可继续执行的任务',
+          }
+        }
+
+        console.log(`继续执行任务: ${taskState.id}`)
+        console.log(`当前步骤: ${taskState.currentStep}`)
+
+        // 获取可继续执行的步骤
+        const continuableStep = await taskStateManager.getContinuableStep()
+        if (!continuableStep) {
+          return {
+            success: false,
+            message: '没有找到可继续执行的步骤',
+          }
+        }
+
+        console.log(`从步骤${continuableStep}开始继续执行`)
+
+        // 重置停止标识
+        this.weworkManager.resetAllStopFlags()
+
+        // 调用继续执行逻辑
+        const result = await this.continueTaskFromStep(taskState, continuableStep)
+
+        return result
+      } catch (error) {
+        console.error('继续执行任务失败:', error)
+        return {
+          success: false,
+          message: `继续执行任务失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+
+    ipcMain.handle('clear-task-state', async () => {
+      try {
+        const { TaskStateManager } = await import('./utils/task-state-manager')
+        const taskStateManager = TaskStateManager.getInstance()
+        await taskStateManager.clearTaskState()
+
+        return {
+          success: true,
+          message: '任务状态已清除',
+        }
+      } catch (error) {
+        console.error('清除任务状态失败:', error)
+        return {
+          success: false,
+          message: `清除任务状态失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        }
+      }
+    })
+  }
+
+  /**
+   * 从指定步骤继续执行任务
+   */
+  private async continueTaskFromStep(taskState: any, startStep: number): Promise<any> {
+    try {
+      const { TaskStateManager } = await import('./utils/task-state-manager')
+      const taskStateManager = TaskStateManager.getInstance()
+
+      console.log(`开始从步骤${startStep}继续执行任务`)
+
+      const storeData = taskState.storeData
+      const qrCodePaths = {
+        weworkQrPath: taskState.qrCodePaths.weworkQrPath || '',
+        weibanQrPath: taskState.qrCodePaths.weibanQrPath || '',
+      }
+
+      // 从指定步骤开始执行
+      for (let step = startStep; step <= 5; step++) {
+        // 检查当前步骤的状态，如果已经成功完成，则跳过
+        const currentStepState = taskState.steps[step - 1]
+        if (currentStepState?.status === 'completed') {
+          console.log(`⏭️  步骤${step}已完成，跳过执行`)
+          // 使用原来的成功消息，如果没有则使用默认消息
+          const originalMessage = currentStepState.message || `步骤${step}已完成`
+          this.sendStepUpdate(step, 'completed', originalMessage)
+          continue
+        }
+
+        // 检查是否请求停止
+        if (this.weworkManager.checkStopRequested()) {
+          console.log('🛑 检测到停止请求，终止继续执行')
+          return {
+            success: false,
+            message: '用户请求停止，任务执行已中断',
+          }
+        }
+
+        try {
+          await taskStateManager.updateStepStatus(step, 'running', `正在执行步骤${step}`)
+          this.sendStepUpdate(step, 'running', `正在执行步骤${step}`)
+
+          let stepResult: any
+
+          switch (step) {
+            case 1:
+              console.log('=== 步骤1: 检查企微登录状态 ===')
+              stepResult = await this.weworkManager.checkWeWorkLogin()
+              break
+
+            case 2:
+              console.log('=== 步骤2: 检查微伴登录状态 ===')
+              stepResult = await this.weibanManager.checkWeibanLogin()
+              break
+
+            case 3:
+              console.log('=== 步骤3: 更改企微通讯录名称 ===')
+              stepResult = await this.weworkManager.changeContactInfo({
+                mobile: storeData.mobile,
+                storeName: storeData.storeName,
+                storeType: storeData.storeType,
+              })
+              break
+
+            case 4:
+              console.log('=== 步骤4: 创建企业微信群码 ===')
+              stepResult = await this.weworkManager.createGroupLiveCode({
+                storeName: storeData.storeName,
+                storeType: storeData.storeType,
+                assistant: storeData.assistant,
+              })
+
+              if (stepResult.success && stepResult.data?.qrCodePath) {
+                qrCodePaths.weworkQrPath = stepResult.data.qrCodePath
+                await taskStateManager.updateQrCodePaths({ weworkQrPath: qrCodePaths.weworkQrPath })
+                this.sendQrCodePaths({
+                  weworkQrPath: qrCodePaths.weworkQrPath,
+                  weibanQrPath: qrCodePaths.weibanQrPath,
+                })
+              }
+              break
+
+            case 5:
+              console.log('=== 步骤5: 创建微伴+v活码 ===')
+
+              // 确保企微群码已经存在
+              if (!qrCodePaths.weworkQrPath) {
+                stepResult = {
+                  success: false,
+                  message: '微伴活码创建失败: 企微群码尚未生成',
+                }
+                break
+              }
+
+              const weworkQrDir = path.dirname(qrCodePaths.weworkQrPath)
+              stepResult = await this.weibanManager.createWeibanLiveCode({
+                qrCodeDir: weworkQrDir,
+                qrCodePath: qrCodePaths.weworkQrPath,
+                storeName: storeData.storeName,
+                storeType: storeData.storeType,
+                assistant: storeData.assistant,
+                weibanAssistant: storeData.weibanAssistant,
+              })
+
+              if (
+                stepResult.success &&
+                (stepResult.data?.qrCodePath || stepResult.data?.weibanQrCodePath)
+              ) {
+                qrCodePaths.weibanQrPath =
+                  stepResult.data?.qrCodePath || stepResult.data?.weibanQrCodePath
+                await taskStateManager.updateQrCodePaths({ weibanQrPath: qrCodePaths.weibanQrPath })
+                this.sendQrCodePaths({
+                  weworkQrPath: qrCodePaths.weworkQrPath,
+                  weibanQrPath: qrCodePaths.weibanQrPath,
+                })
+              }
+              break
+
+            default:
+              stepResult = { success: false, message: `未知步骤: ${step}` }
+          }
+
+          if (stepResult.success) {
+            await taskStateManager.updateStepStatus(step, 'completed', `步骤${step}执行成功`)
+            this.sendStepUpdate(step, 'completed', `步骤${step}执行成功`)
+            console.log(`✅ 步骤${step}执行成功`)
+          } else {
+            await taskStateManager.updateStepStatus(
+              step,
+              'failed',
+              `步骤${step}执行失败: ${stepResult.message}`,
+            )
+            this.sendStepUpdate(step, 'failed', `步骤${step}执行失败: ${stepResult.message}`)
+            console.log(`❌ 步骤${step}执行失败: ${stepResult.message}`)
+
+            // 通知渲染进程检查是否有未完成任务（用于显示继续执行按钮）
+            this.sendTaskStateUpdate()
+
+            return {
+              success: false,
+              message: `步骤${step}执行失败: ${stepResult.message}`,
+              data: qrCodePaths,
+            }
+          }
+        } catch (error) {
+          const errorMessage = `步骤${step}执行异常: ${error instanceof Error ? error.message : '未知错误'}`
+          await taskStateManager.updateStepStatus(step, 'failed', errorMessage)
+          this.sendStepUpdate(step, 'failed', errorMessage)
+          console.error(errorMessage, error)
+
+          // 通知渲染进程检查是否有未完成任务（用于显示继续执行按钮）
+          this.sendTaskStateUpdate()
+
+          return {
+            success: false,
+            message: errorMessage,
+            data: qrCodePaths,
+          }
+        }
+      }
+
+      // 所有步骤执行完成
+      console.log('=== 任务继续执行完成 ===')
+      await this.browserInstance.forceCloseBrowser()
+      this.sendButtonStateUpdate('completed')
+
+      // 清除任务状态
+      await taskStateManager.clearTaskState()
+
+      return {
+        success: true,
+        message: '任务继续执行完成',
+        data: qrCodePaths,
+      }
+    } catch (error) {
+      console.error('继续执行任务异常:', error)
+
+      try {
+        await this.browserInstance.forceCloseBrowser()
+      } catch (closeError) {
+        console.error('关闭浏览器失败:', closeError)
+      }
+
+      this.sendButtonStateUpdate('failed')
+
+      return {
+        success: false,
+        message: `继续执行任务异常: ${error instanceof Error ? error.message : '未知错误'}`,
+      }
+    }
   }
 
   // 发送步骤更新事件到渲染进程
@@ -1120,6 +1464,18 @@ class ElectronApp {
         message,
         timestamp: Date.now(),
       })
+    }
+  }
+
+  // 发送任务状态更新通知到渲染进程
+  private sendTaskStateUpdate(): void {
+    try {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('task-state-update')
+        console.log('已发送任务状态更新通知')
+      }
+    } catch (error) {
+      console.error('发送任务状态更新通知失败:', error)
     }
   }
 

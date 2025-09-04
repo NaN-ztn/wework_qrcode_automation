@@ -2,6 +2,7 @@ class RendererApp {
   private installBtn!: HTMLButtonElement
   private executeBtn!: HTMLButtonElement
   private stopBtn!: HTMLButtonElement
+  private continueBtn!: HTMLButtonElement
   private statusDiv!: HTMLDivElement
   private logsDiv!: HTMLDivElement
   private progressPanel!: HTMLDivElement
@@ -134,12 +135,16 @@ class RendererApp {
     this.initializeStoreForm()
     this.startStatusUpdater()
     this.addLog('应用程序已启动', 'info')
+
+    // 检查是否有未完成的任务
+    this.checkAndShowContinueButton()
   }
 
   private initializeElements(): void {
     this.installBtn = document.getElementById('installBtn') as HTMLButtonElement
     this.executeBtn = document.getElementById('executeBtn') as HTMLButtonElement
     this.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement
+    this.continueBtn = document.getElementById('continueBtn') as HTMLButtonElement
     this.statusDiv = document.getElementById('status') as HTMLDivElement
     this.logsDiv = document.getElementById('logs') as HTMLDivElement
     this.progressPanel = document.getElementById('progressPanel') as HTMLDivElement
@@ -236,6 +241,7 @@ class RendererApp {
   private setupEventListeners(): void {
     this.executeBtn.addEventListener('click', () => this.executeTask())
     this.stopBtn.addEventListener('click', () => this.stopExecution())
+    this.continueBtn.addEventListener('click', () => this.continueTask())
 
     // 标签页切换
     this.mainTab.addEventListener('click', () => this.switchTab('main'))
@@ -726,6 +732,115 @@ class RendererApp {
     }
   }
 
+  private async continueTask(): Promise<void> {
+    try {
+      this.addLog('🔄 准备继续执行任务...', 'info')
+
+      // 检查是否有未完成的任务状态
+      const taskStateResult = await window.electronAPI.getCurrentTaskState()
+      if (!taskStateResult.success || !taskStateResult.data) {
+        this.addLog('❌ 没有找到可继续执行的任务', 'error')
+        this.hideContinueButton()
+        return
+      }
+
+      const taskState = taskStateResult.data
+      this.addLog(`📋 继续执行任务: ${taskState.storeData.storeName}`, 'info')
+      this.addLog(`🔄 从步骤${taskState.currentStep}开始继续执行`, 'info')
+
+      // 恢复门店数据到表单
+      this.restoreStoreData(taskState.storeData)
+
+      // 恢复UI状态
+      this.restoreUIState(taskState)
+
+      // 设置运行状态
+      this.isRunning = true
+      this.executeBtn.disabled = true
+      this.continueBtn.disabled = true
+      this.stopBtn.disabled = false
+
+      // 隐藏继续执行按钮，因为任务已经开始
+      this.hideContinueButton()
+
+      // 调用继续执行的API
+      const executeResult = await window.electronAPI.continueTaskExecution()
+
+      // 处理执行结果
+      if (executeResult.success) {
+        this.addLog(`✅ ${executeResult.message}`, 'success')
+      } else {
+        this.addLog(`❌ ${executeResult.message}`, 'error')
+      }
+    } catch (error) {
+      this.addLog(`💥 继续执行任务异常: ${error}`, 'error')
+    } finally {
+      this.isRunning = false
+      this.validateForm() // 重新验证表单以更新按钮状态
+      this.stopBtn.disabled = true
+      this.continueBtn.disabled = false
+    }
+  }
+
+  private restoreStoreData(storeData: any): void {
+    this.storeNameInput.value = storeData.storeName || ''
+    this.mobileInput.value = storeData.mobile || ''
+    this.storeTypeSelect.value = storeData.storeType || ''
+    this.assistantSelect.value = storeData.assistant || ''
+    this.weibanAssistantSelect.value = storeData.weibanAssistant || ''
+
+    this.addLog('📝 已恢复门店信息到表单', 'info')
+  }
+
+  private restoreUIState(taskState: any): void {
+    // 恢复步骤状态
+    taskState.steps.forEach((step: any, index: number) => {
+      this.updateStepUI(step.stepNumber, step.status, step.message)
+    })
+
+    // 恢复二维码显示
+    if (taskState.qrCodePaths.weworkQrPath) {
+      this.displayQrCode('wework', taskState.qrCodePaths.weworkQrPath)
+      this.addLog(`📷 已恢复企业微信群码显示`, 'info')
+    }
+    if (taskState.qrCodePaths.weibanQrPath) {
+      this.displayQrCode('weiban', taskState.qrCodePaths.weibanQrPath)
+      this.addLog(`📷 已恢复微伴活码显示`, 'info')
+    }
+
+    this.addLog('🔄 UI状态已恢复', 'info')
+  }
+
+  private async checkAndShowContinueButton(): Promise<void> {
+    try {
+      console.log('开始检查是否有未完成任务...')
+      const hasUnfinishedTask = await window.electronAPI.hasUnfinishedTask()
+      console.log('未完成任务检查结果:', hasUnfinishedTask)
+
+      if (hasUnfinishedTask) {
+        console.log('发现未完成任务，显示继续执行按钮')
+        this.showContinueButton()
+      } else {
+        console.log('没有未完成任务，隐藏继续执行按钮')
+        this.hideContinueButton()
+      }
+    } catch (error) {
+      console.error('检查未完成任务状态失败:', error)
+      this.hideContinueButton()
+    }
+  }
+
+  private showContinueButton(): void {
+    this.continueBtn.style.display = 'inline-block'
+    this.continueBtn.disabled = false
+    this.addLog('🔄 发现未完成的任务，继续执行按钮已启用', 'info')
+  }
+
+  private hideContinueButton(): void {
+    this.continueBtn.style.display = 'none'
+    this.continueBtn.disabled = true
+  }
+
   private validateStoreData(storeData: any): { isValid: boolean; message: string } {
     // 门店名称验证
     if (storeData.storeName.length < 2) {
@@ -929,9 +1044,18 @@ class RendererApp {
 
       if (data.status === 'completed') {
         this.addLog('✅ 任务完成，浏览器已关闭', 'success')
+        // 任务完全成功时隐藏继续执行按钮
+        this.hideContinueButton()
       } else {
         this.addLog('❌ 任务失败，浏览器已关闭', 'error')
+        // 任务失败时不立即隐藏，让延迟检查决定是否显示
       }
+    })
+
+    // 任务状态更新监听
+    window.electronAPI.onTaskStateUpdate(() => {
+      console.log('收到任务状态更新通知，检查继续执行按钮')
+      this.checkAndShowContinueButton()
     })
   }
 
@@ -952,12 +1076,18 @@ class RendererApp {
     // 重置运行状态
     this.isRunning = false
 
-    // 重置所有步骤状态
-    this.steps.forEach((step, index) => {
-      step.status = 'pending'
-      step.message = '等待执行...'
-      this.updateStepUI(index + 1, 'pending', '等待执行...')
-    })
+    // 检查是否需要显示继续执行按钮（延迟检查以确保任务状态已保存）
+    setTimeout(() => {
+      this.checkAndShowContinueButton()
+    }, 500)
+
+    // 重置所有步骤状态（仅在任务完全成功时）
+    // 如果有失败步骤，保留步骤状态以便继续执行
+    // this.steps.forEach((step, index) => {
+    //   step.status = 'pending'
+    //   step.message = '等待执行...'
+    //   this.updateStepUI(index + 1, 'pending', '等待执行...')
+    // })
   }
 
   private async stopExecution(): Promise<void> {

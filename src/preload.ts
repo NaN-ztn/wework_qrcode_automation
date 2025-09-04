@@ -90,6 +90,12 @@ interface ElectronAPI {
       timestamp: number
     }) => void,
   ) => void
+  // 任务状态管理相关接口
+  getCurrentTaskState: () => Promise<{ success: boolean; data?: any; message?: string }>
+  hasUnfinishedTask: () => Promise<boolean>
+  continueTaskExecution: () => Promise<{ success: boolean; message: string; data?: any }>
+  clearTaskState: () => Promise<{ success: boolean; message?: string }>
+  onTaskStateUpdate: (callback: () => void) => void
 }
 
 const electronAPI: ElectronAPI = {
@@ -153,6 +159,14 @@ const electronAPI: ElectronAPI = {
   },
   onPluginStatusUpdate: (callback) => {
     ipcRenderer.on('plugin-status-update', (_, data) => callback(data))
+  },
+  // 任务状态管理相关API实现
+  getCurrentTaskState: () => ipcRenderer.invoke('get-current-task-state'),
+  hasUnfinishedTask: () => ipcRenderer.invoke('has-unfinished-task'),
+  continueTaskExecution: () => ipcRenderer.invoke('continue-task-execution'),
+  clearTaskState: () => ipcRenderer.invoke('clear-task-state'),
+  onTaskStateUpdate: (callback) => {
+    ipcRenderer.on('task-state-update', () => callback())
   },
 }
 
