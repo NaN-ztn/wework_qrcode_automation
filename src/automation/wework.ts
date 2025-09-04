@@ -308,10 +308,10 @@ export class WeworkManager extends BaseManager {
         if (!avatarUpdateResult.success) {
           return avatarUpdateResult
         }
-        await this.wait(1000)
       } else {
         console.log('跳过头像更新(非店中店类型)')
       }
+      await this.wait(5000)
 
       // 步骤5: 修改部门信息
       console.log('步骤5: 修改部门信息...')
