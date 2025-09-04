@@ -1547,8 +1547,9 @@ export class WeworkManager extends BaseManager {
           const roomId = room.roomid || ''
 
           // 获取更详细的群组信息（包含成员数量）
-          const detailedGroupInfo = await this.getGroupChatDetails(page, roomId)
-          const memberCount = detailedGroupInfo?.member_count || 0
+          // const detailedGroupInfo = await this.getGroupChatDetails(page, roomId)
+          // const memberCount = detailedGroupInfo?.member_count || 0
+          const memberCount = 0
 
           console.log(`检查群组: ${roomname} (成员数: ${memberCount})`)
 
