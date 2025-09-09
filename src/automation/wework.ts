@@ -2523,8 +2523,10 @@ export class WeworkManager extends BaseManager {
     criticalFailure?: boolean
     criticalError?: string
   }> {
-    const deleteOperations = operations.filter(
-      (op) => op.operationType === GroupOperationType.DELETE_BY_MEMBER_COUNT,
+    const deleteOperations = operations.filter((op) =>
+      [GroupOperationType.DELETE_BY_MEMBER_COUNT, GroupOperationType.DELETE_BY_KEYWORD].includes(
+        op.operationType,
+      ),
     )
 
     if (deleteOperations.length === 0) {
